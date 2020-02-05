@@ -1,7 +1,8 @@
 [tool.poetry]
 name = "github-as-pypi"
 version = "0.1.0"
-description = ""
+description = "A private PyPI server powered by GitHub."
+license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
 readme = "README.md"
 
@@ -14,7 +15,6 @@ portalocker = "^1.5.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
-ipython = "^7.12.0"
 yapf = "^0.29.0"
 pylint = "^2.4.4"
 
