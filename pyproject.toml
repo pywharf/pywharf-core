@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "github-as-pypi"
+version = "0.1.0"
+description = ""
+authors = ["huntzhan <huntzhan.dev@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+flask = "^1.1.1"
+requests = "^2.22.0"
+PyGithub = "^1.45"
+portalocker = "^1.5.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+ipython = "^7.12.0"
+yapf = "^0.29.0"
+pylint = "^2.4.4"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
