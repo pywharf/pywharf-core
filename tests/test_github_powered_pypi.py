@@ -1,4 +1,4 @@
-from github_as_pypi import __version__
+from github_powered_pypi import __version__
 
 
 def test_version():

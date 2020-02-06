@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "github-as-pypi"
+name = "github-powered-pypi"
 version = "0.1.0"
 description = "A private PyPI server powered by GitHub."
 license = "MIT"
