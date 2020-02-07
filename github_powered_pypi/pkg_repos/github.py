@@ -90,7 +90,7 @@ def locked_read_file(lock_path, file_path, timeout=-1):
 def locked_read_toml(lock_path, file_path, timeout=-1):
     status, text = locked_read_file(lock_path, file_path, timeout=timeout)
     struct = None
-    if status:
+    if status and text is not None:
         struct = toml.loads(text)
     return status, struct
 
@@ -220,11 +220,11 @@ class GitHubPkgRepo(PkgRepo):
         return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.args')
 
     # task_logging: the logging of task.
+    def task_logging_lock_path(self, task_type: TaskType, name: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.log.lock')
+
     def task_logging_path(self, task_type: TaskType, name: str, task_id: str):
         return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.log')
-
-    def task_logging_exists(self, task_type: TaskType, name: str, task_id: str):
-        return os.path.exists(self.task_logging_path(task_type, name, task_id))
 
     # task_final: metadata of the final result.
     def task_finalstat_lock_path(self, task_type: TaskType, name: str, task_id: str):
@@ -283,6 +283,7 @@ class GitHubPkgRepo(PkgRepo):
             args_path = self.task_args_path(TaskType.UPLOAD_PACKAGE, name, task_id)
 
             repo_dict = asdict(self)
+            # TODO: dataclass.
             task_dict = {
                     'name': name,
                     'meta': meta,
@@ -296,6 +297,8 @@ class GitHubPkgRepo(PkgRepo):
                             self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
                     'runstat':
                             self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
+                    'logging_lock':
+                            self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
                     'logging':
                             self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
                     'finalstat_lock':
@@ -335,21 +338,23 @@ class GitHubPkgRepo(PkgRepo):
             message = 'stat path not set.'
 
         elif file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
-            logging_path = self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id)
-            if not os.path.exists(logging_path):
-                status = UploadPackageStatus.FAILED
-                message = 'Task is running but cannot find the log.'
+            logging_message_status, logging_message = locked_read_file(
+                    self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    timeout=LOCK_TIMEOUT,
+            )
 
-            try:
-                # TODO: This might cause read-write conflcit, but should be rare.
-                # Will attach lock if encounter error.
-                with open(logging_path) as fin:
-                    message = fin.read()
+            if logging_message_status:
+                if logging_message is None:
+                    status = UploadPackageStatus.FAILED
+                    message = 'Task is running but cannot find the log.'
+                else:
+                    status = UploadPackageStatus.TASK_CREATED
+                    message = logging_message
+
+            else:
                 status = UploadPackageStatus.TASK_CREATED
-
-            except IOError:
-                status = UploadPackageStatus.FAILED
-                message = 'Task is running but cannot read the log (IOError).'
+                message = 'Busy lock, try later.'
 
         else:
             finalstat_status, finalstat = locked_read_toml(
@@ -419,11 +424,13 @@ class GitHubPkgRepo(PkgRepo):
 
 
 @dataclass
-class FileLikeObject(TextIO):  # pylint: disable=abstract-method
+class LockedFileLikeObject(TextIO):  # pylint: disable=abstract-method
+    lock_path: str
     write_func: Callable
 
     def write(self, s: str) -> int:
-        self.write_func(s)
+        with FileLock(self.lock_path):
+            self.write_func(s)
         return 0
 
 
@@ -437,12 +444,13 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
     task_dict = args['task_dict']
 
     logging.basicConfig(level=logging.INFO, filename=args['task_paths']['logging'])
+    logging.getLogger("filelock").setLevel(logging.WARNING)
 
     logger_stdout = logging.getLogger('stdout')
-    file_like_stdout = FileLikeObject(logger_stdout.info)
+    lfl_stdout = LockedFileLikeObject(args['task_paths']['logging_lock'], logger_stdout.info)
 
     logger_stderr = logging.getLogger('stderr')
-    file_like_stderr = FileLikeObject(logger_stderr.error)
+    lfl_stderr = LockedFileLikeObject(args['task_paths']['logging_lock'], logger_stderr.error)
 
     flock = FileLock(args['task_paths']['lock'])
     flock.acquire()
@@ -450,8 +458,7 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
     failed = False
 
     try:
-        with contextlib.redirect_stdout(file_like_stdout), \
-                contextlib.redirect_stderr(file_like_stderr):
+        with contextlib.redirect_stdout(lfl_stdout), contextlib.redirect_stderr(lfl_stderr):
             repo = GitHubPkgRepo(
                     config=GitHubConfig(**repo_dict['config']),
                     secret=GitHubAuthToken(**repo_dict['secret']),
@@ -467,24 +474,27 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
                 logger_stderr.error('blocked for writing to runstat.')
                 return 1
 
-            logger_stdout.info('Task=%s created', task_dict['task_id'])
+            lfl_stdout.write('Task={} created'.format(task_dict['task_id']))
 
             ctx = repo.upload_package_task(task_dict['name'], task_dict['meta'], task_dict['path'])
             failed = ctx.failed
 
-            logger_stdout.info('Task failed: %s', ctx.failed)
-            logger_stdout.info('Task message: %s', ctx.message)
-
-            logger_stdout.info('Task=%s finished', task_dict['task_id'])
+            lfl_stdout.write('Task failed: {}'.format(ctx.failed))
+            lfl_stdout.write('Task message: {}'.format(ctx.message))
+            lfl_stdout.write('Task={} finished'.format(task_dict['task_id']))
 
     except:  # pylint: disable=bare-except
-        logger_stderr.error(traceback.format_exc())
+        lfl_stderr.write(traceback.format_exc())
         failed = True
         return 1
 
     finally:
-        with open(args['task_paths']['logging']) as fin:
-            logging_message = fin.read()
+        _, logging_message = locked_read_file(
+                args['task_paths']['logging_lock'],
+                args['task_paths']['logging'],
+        )
+        if logging_message is None:
+            logging_message = 'logging file not exits.'
 
         locked_write_toml(
                 args['task_paths']['finalstat_lock'],
