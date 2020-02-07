@@ -254,9 +254,15 @@ class GitHubPkgRepo(PkgRepo):
             )
 
         if file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
+            runstat_status, runstat = locked_read_toml(
+                    self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
+                    self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
+                    timeout=0.5,
+            )
             return UploadPackageResult(
                     status=UploadPackageStatus.TASK_CREATED,
                     message='upload task is running.',
+                    task_id=None if not runstat_status else runstat['task_id'],
             )
 
         if os.path.getsize(path) < self.config.large_package_bytes:
