@@ -1,14 +1,14 @@
 import contextlib
 from dataclasses import asdict, dataclass
 from enum import Enum, auto
+import hashlib
 import logging
 import os
 import os.path
+import re
 import subprocess
 import traceback
-from typing import Callable, Dict, Optional, TextIO, Tuple, List
-import re
-import hashlib
+from typing import Callable, Dict, List, Optional, TextIO, Tuple
 
 from filelock import FileLock
 import fire
@@ -18,12 +18,12 @@ import toml
 
 from github_powered_pypi.pkg_repos.pkg_repo import (
         LocalPaths,
+        PkgRef,
         PkgRepo,
         PkgRepoConfig,
         PkgRepoSecret,
         UploadPackageResult,
         UploadPackageStatus,
-        PkgRef,
 )
 
 
@@ -275,9 +275,9 @@ class GitHubPkgRepo(PkgRepo):
         # SHA256 checksum, also suggested by PEP-503.
         if not ctx.meta.get('sha256'):
             sha256_algo = hashlib.sha256()
-            with open(ctx.path, 'rb') as f:
+            with open(ctx.path, 'rb') as fin:
                 # 64KB block.
-                for block in iter(lambda: f.read(65536), b''):
+                for block in iter(lambda: fin.read(65536), b''):
                     sha256_algo.update(block)
 
             ctx.meta['sha256'] = sha256_algo.hexdigest()
@@ -482,7 +482,48 @@ class GitHubPkgRepo(PkgRepo):
         raise NotImplementedError()
 
     def collect_all_published_packages(self) -> List[GitHubPkgRef]:
-        raise NotImplementedError()
+        pkg_refs: List[GitHubPkgRef] = []
+
+        for release in self._gh_repo.get_releases():
+            if release.draft:
+                continue
+
+            try:
+                meta: Dict[str, str] = toml.loads(release.body)
+            except toml.TomlDecodeError:
+                continue
+
+            distrib = meta.get('distrib')
+            sha256 = meta.get('sha256')
+            if not distrib or not sha256:
+                continue
+
+            package, _, _ = release.tag_name.rpartition('.')
+            if not package:
+                continue
+
+            raw_assets = release._rawData.get('assets')  # pylint: disable=protected-access
+            if not raw_assets:
+                continue
+            browser_download_url = None
+            for raw_asset in raw_assets:
+                if raw_asset.get('name') == release.tag_name:
+                    browser_download_url = raw_asset.get('browser_download_url')
+                    if browser_download_url:
+                        break
+            if not browser_download_url:
+                continue
+
+            pkg_refs.append(
+                    GitHubPkgRef(
+                            distrib=distrib,
+                            package=package,
+                            sha256=sha256,
+                            meta=meta,
+                            browser_download_url=browser_download_url,
+                    ))
+
+        return pkg_refs
 
     def upload_index(self, path: str):
         raise NotImplementedError()

@@ -45,7 +45,7 @@ class DownloadPackageResult:
 @dataclass
 class PkgRef:
     distrib: str
-    filename: str
+    package: str
     sha256: str
     meta: Dict[str, str]
 
