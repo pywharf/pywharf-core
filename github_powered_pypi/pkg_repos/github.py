@@ -64,6 +64,51 @@ def read_args(path):
         return toml.loads(fin.read())
 
 
+def file_lock_is_busy(lock_path):
+    flock = FileLock(lock_path)
+    busy = False
+    try:
+        flock.acquire(timeout=0.1, poll_intervall=0.05)
+    except TimeoutError:
+        busy = True
+    finally:
+        flock.release()
+    return busy
+
+
+def locked_read_file(lock_path, file_path, timeout=-1):
+    try:
+        with FileLock(lock_path, timeout=timeout):
+            if not os.path.exists(file_path):
+                return True, None
+            with open(file_path) as fin:
+                return True, fin.read()
+    except TimeoutError:
+        return False, ''
+
+
+def locked_read_toml(lock_path, file_path, timeout=-1):
+    status, text = locked_read_file(lock_path, file_path, timeout=timeout)
+    struct = None
+    if status:
+        struct = toml.loads(text)
+    return status, struct
+
+
+def locked_write_file(lock_path, file_path, text, timeout=-1):
+    try:
+        with FileLock(lock_path, timeout=timeout):
+            with open(file_path, 'w') as fout:
+                fout.write(text)
+            return True
+    except TimeoutError:
+        return False
+
+
+def locked_write_toml(lock_path, file_path, struct, timeout=-1):
+    return locked_write_file(lock_path, file_path, toml.dumps(struct), timeout=timeout)
+
+
 @dataclass
 class GitHubPkgRepo(PkgRepo):
     config: GitHubConfig
@@ -145,36 +190,46 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in release publishing.\n' + str(ex.data)
 
+    def _path_join_stat(self, fname: str):
+        assert isinstance(self.local_paths.stat, str)
+        return os.path.join(self.local_paths.stat, fname)
+
+    # <task_type>-<distribution>
     def _task_name(self, task_type: TaskType, name: str):
         return f'{self.config.name}-{task_type.name.lower()}-{name}'
 
     def task_lock_path(self, task_type: TaskType, name: str):
-        assert isinstance(self.local_paths.stat, str)
-        return os.path.join(self.local_paths.stat, f'{self._task_name(task_type, name)}.lock')
+        return self._path_join_stat(f'{self._task_name(task_type, name)}.lock')
 
-    def task_lock_busy(self, task_type: TaskType, name: str):
-        flock = FileLock(self.task_lock_path(task_type, name))
-        busy = False
-        try:
-            flock.acquire(timeout=0.5)
-        except TimeoutError:
-            busy = True
-        finally:
-            flock.release()
-        return busy
+    # task_runstat: metadata of the running task like task id.
+    def task_runstat_lock_path(self, task_type: TaskType, name: str):
+        return self._path_join_stat(f'{self._task_name(task_type, name)}.runstat.lock')
 
+    def task_runstat_path(self, task_type: TaskType, name: str):
+        return self._path_join_stat(f'{self._task_name(task_type, name)}.runstat')
+
+    # <task_type>-<distribution>-<task_id>
+    def _task_name_id(self, task_type: TaskType, name: str, task_id: str):
+        return f'{self._task_name(task_type, name)}-{task_id}'
+
+    # task_args: the input of task.
+    def task_args_path(self, task_type: TaskType, name: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.args')
+
+    # task_logging: the logging of task.
     def task_logging_path(self, task_type: TaskType, name: str, task_id: str):
-        assert isinstance(self.local_paths.stat, str)
-        return os.path.join(self.local_paths.stat,
-                            f'{self._task_name(task_type, name)}-{task_id}.log')
+        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.log')
 
     def task_logging_exists(self, task_type: TaskType, name: str, task_id: str):
         return os.path.exists(self.task_logging_path(task_type, name, task_id))
 
-    def task_args_path(self, task_type: TaskType, name: str, task_id: str):
-        assert isinstance(self.local_paths.stat, str)
-        return os.path.join(self.local_paths.stat,
-                            f'{self._task_name(task_type, name)}-{task_id}.args')
+    # task_final: metadata of the final result.
+    def task_finalstat_lock_path(self, task_type: TaskType, name: str, task_id: str):
+        return self._path_join_stat(
+                f'{self._task_name_id(task_type, name, task_id)}.finalstat.lock')
+
+    def task_finalstat_path(self, task_type: TaskType, name: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.finalstat')
 
     def upload_package_task(self, name: str, meta: Dict[str, str], path: str):
         ctx = UploadAndDownloadPackageContext(name=name, meta=meta, path=path)
@@ -198,7 +253,7 @@ class GitHubPkgRepo(PkgRepo):
                     message='stat path not set.',
             )
 
-        if self.task_lock_busy(TaskType.UPLOAD_PACKAGE, name):
+        if file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
             return UploadPackageResult(
                     status=UploadPackageStatus.TASK_CREATED,
                     message='upload task is running.',
@@ -217,27 +272,46 @@ class GitHubPkgRepo(PkgRepo):
             # Large package.
             task_id = shortuuid.ShortUUID().random(length=6)
             args_path = self.task_args_path(TaskType.UPLOAD_PACKAGE, name, task_id)
+
+            repo_dict = asdict(self)
+            task_dict = {
+                    'name': name,
+                    'meta': meta,
+                    'path': path,
+                    'task_id': task_id,
+            }
+            task_paths = {
+                    'lock':
+                            self.task_lock_path(TaskType.UPLOAD_PACKAGE, name),
+                    'runstat_lock':
+                            self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
+                    'runstat':
+                            self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
+                    'logging':
+                            self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    'finalstat_lock':
+                            self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    'finalstat':
+                            self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+            }
+
             write_args(
                     args_path,
                     {
-                            'repo_dict':
-                                    asdict(self),
-                            'task_dict': {
-                                    'name': name,
-                                    'meta': meta,
-                                    'path': path,
-                                    'task_id': task_id,
-                            },
-                            'lock_path':
-                                    self.task_lock_path(TaskType.UPLOAD_PACKAGE, name),
-                            'logging_path':
-                                    self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                            'repo_dict': repo_dict,
+                            'task_dict': task_dict,
+                            'task_paths': task_paths,
                     },
             )
             subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
                     ['github_upload_package', args_path, '--remove_args_path'],
+                    # Share env for resolving `github_upload_package`.
                     env=dict(os.environ),
+                    # Add to the current process group.
                     preexec_fn=os.setpgrp,
+                    # Suppress stdout or stderr.
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
             )
 
             return UploadPackageResult(
@@ -310,7 +384,7 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
     repo_dict = args['repo_dict']
     task_dict = args['task_dict']
 
-    logging.basicConfig(level=logging.INFO, filename=args['logging_path'])
+    logging.basicConfig(level=logging.INFO, filename=args['task_paths']['logging'])
 
     logger_stdout = logging.getLogger('stdout')
     file_like_stdout = FileLikeObject(logger_stdout.info)
@@ -318,8 +392,10 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
     logger_stderr = logging.getLogger('stderr')
     file_like_stderr = FileLikeObject(logger_stderr.error)
 
-    flock = FileLock(args['lock_path'])
+    flock = FileLock(args['task_paths']['lock'])
     flock.acquire()
+
+    failed = False
 
     try:
         with contextlib.redirect_stdout(file_like_stdout), \
@@ -330,9 +406,20 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
                     local_paths=LocalPaths(**repo_dict['local_paths']),
             )
 
+            if not locked_write_toml(
+                    args['task_paths']['runstat_lock'],
+                    args['task_paths']['runstat'],
+                    task_dict,
+                    timeout=1.0,
+            ):
+                logger_stderr.error('blocked for writing to runstat.')
+                return 1
+
             logger_stdout.info('Task=%s created', task_dict['task_id'])
 
             ctx = repo.upload_package_task(task_dict['name'], task_dict['meta'], task_dict['path'])
+            failed = ctx.failed
+
             logger_stdout.info('Task failed: %s', ctx.failed)
             logger_stdout.info('Task message: %s', ctx.message)
 
@@ -340,9 +427,26 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
 
     except:  # pylint: disable=bare-except
         logger_stderr.error(traceback.format_exc())
+        failed = True
+        return 1
 
     finally:
+        with open(args['task_paths']['logging']) as fin:
+            logging_message = fin.read()
+
+        locked_write_toml(
+                args['task_paths']['finalstat_lock'],
+                args['task_paths']['finalstat'],
+                {
+                        'failed': failed,
+                        'logging_message': logging_message,
+                },
+                timeout=1.0,
+        )
+
         flock.release()
+
+    return 0
 
 
 github_upload_package_cli = lambda: fire.Fire(github_upload_package)  # pylint: disable=invalid-name
