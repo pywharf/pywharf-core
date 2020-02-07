@@ -507,6 +507,9 @@ class GitHubPkgRepo(PkgRepo):
     def view_task_download_package(self, filename: str, task_id: str):
         raise NotImplementedError()
 
+    def delete_package(self, filename: str) -> bool:
+        raise NotImplementedError()
+
     def collect_all_published_packages(self) -> List[GitHubPkgRef]:
         pkg_refs: List[GitHubPkgRef] = []
 

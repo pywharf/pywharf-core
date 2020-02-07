@@ -89,6 +89,10 @@ class PkgRepo:
         pass
 
     @abstractmethod
+    def delete_package(self, filename: str) -> bool:
+        pass
+
+    @abstractmethod
     def collect_all_published_packages(self) -> List[PkgRef]:
         pass
 
