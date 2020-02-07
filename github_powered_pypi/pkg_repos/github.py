@@ -8,11 +8,13 @@ import os.path
 import re
 import subprocess
 import traceback
+from urllib.parse import urlparse
 from typing import Callable, Dict, List, Optional, TextIO, Tuple
 
 from filelock import FileLock
 import fire
 import github
+import requests
 import shortuuid
 import toml
 
@@ -118,13 +120,37 @@ class UploadAndDownloadPackageContext:
 
 @dataclass
 class GitHubPkgRef(PkgRef):
-    browser_download_url: str
-
-    def __post_init__(self):
-        pass
+    url: str
 
     def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
-        return ''
+        headers = {
+                'Accept': 'application/octet-stream',
+                'Authorization': f'token {secret.token}',
+        }
+        retry = 3
+        response = None
+        while retry > 0:
+            try:
+                response = requests.get(
+                        self.url,
+                        headers=headers,
+                        allow_redirects=False,
+                        timeout=1.0,
+                )
+                break
+            except requests.Timeout:
+                retry -= 1
+                response = None
+                continue
+
+        assert retry > 0
+        response.raise_for_status()
+        assert response.status_code == 302
+
+        parsed = urlparse(response.next.url)
+        assert not parsed.fragment
+
+        return parsed._replace(fragment=f'sha256={self.sha256}').geturl()
 
 
 def write_args(path, args):
@@ -505,23 +531,23 @@ class GitHubPkgRepo(PkgRepo):
             raw_assets = release._rawData.get('assets')  # pylint: disable=protected-access
             if not raw_assets:
                 continue
-            browser_download_url = None
+            url = None
             for raw_asset in raw_assets:
                 if raw_asset.get('name') == release.tag_name:
-                    browser_download_url = raw_asset.get('browser_download_url')
-                    if browser_download_url:
+                    url = raw_asset.get('url')
+                    if url:
                         break
-            if not browser_download_url:
+            if not url:
                 continue
 
-            pkg_refs.append(
-                    GitHubPkgRef(
-                            distrib=distrib,
-                            package=package,
-                            sha256=sha256,
-                            meta=meta,
-                            browser_download_url=browser_download_url,
-                    ))
+            pkg_ref = GitHubPkgRef(
+                    distrib=distrib,
+                    package=package,
+                    sha256=sha256,
+                    meta=meta,
+                    url=url,
+            )
+            pkg_refs.append(pkg_ref)
 
         return pkg_refs
 
