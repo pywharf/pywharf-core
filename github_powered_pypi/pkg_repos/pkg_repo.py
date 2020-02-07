@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Dict, Optional
@@ -47,29 +48,38 @@ class PkgRepo:
     secret: PkgRepoSecret
     local_paths: LocalPaths
 
-    def auth_read(self):
-        raise NotImplementedError()
+    @abstractmethod
+    def auth_read(self) -> bool:
+        pass
 
-    def auth_write(self):
-        raise NotImplementedError()
+    @abstractmethod
+    def auth_write(self) -> bool:
+        pass
 
-    def upload_package(self, name: str, meta: Dict[str, str], path: str):
-        raise NotImplementedError()
+    @abstractmethod
+    def upload_package(self, name: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
+        pass
 
-    def show_task_upload_package(self, name: str, task_id: str):
-        raise NotImplementedError()
+    @abstractmethod
+    def show_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
+        pass
 
-    def download_package(self, name: str, output: str):
-        raise NotImplementedError()
+    @abstractmethod
+    def download_package(self, name: str, output: str) -> DownloadPackageResult:
+        pass
 
-    def show_task_download_package(self, name: str, task_id: str):
-        raise NotImplementedError()
+    @abstractmethod
+    def show_task_download_package(self, name: str, task_id: str) -> DownloadPackageResult:
+        pass
 
+    @abstractmethod
     def download_index_struct(self):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def upload_index(self, path: str):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def download_index(self):
-        raise NotImplementedError()
+        pass

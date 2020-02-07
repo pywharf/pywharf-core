@@ -77,10 +77,10 @@ class GitHubPkgRepo(PkgRepo):
         self._gh_username: str = self._gh_client.get_user().login
         self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
 
-    def auth_read(self) -> bool:
+    def auth_read(self):
         return self._gh_permission != 'none'
 
-    def auth_write(self) -> bool:
+    def auth_write(self):
         return self._gh_permission in ('admin', 'write')
 
     def _check_published_release_not_exists(self, ctx: UploadAndDownloadPackageContext):
@@ -317,8 +317,6 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
 
     logger_stderr = logging.getLogger('stderr')
     file_like_stderr = FileLikeObject(logger_stderr.error)
-
-    logger_stdout.info('ENV: %s', os.environ)
 
     flock = FileLock(args['lock_path'])
     flock.acquire()
