@@ -109,6 +109,9 @@ def locked_write_toml(lock_path, file_path, struct, timeout=-1):
     return locked_write_file(lock_path, file_path, toml.dumps(struct), timeout=timeout)
 
 
+LOCK_TIMEOUT = 0.5
+
+
 @dataclass
 class GitHubPkgRepo(PkgRepo):
     config: GitHubConfig
@@ -257,7 +260,7 @@ class GitHubPkgRepo(PkgRepo):
             runstat_status, runstat = locked_read_toml(
                     self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
                     self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
-                    timeout=0.5,
+                    timeout=LOCK_TIMEOUT,
             )
             return UploadPackageResult(
                     status=UploadPackageStatus.TASK_CREATED,
@@ -268,7 +271,7 @@ class GitHubPkgRepo(PkgRepo):
         if os.path.getsize(path) < self.config.large_package_bytes:
             # Small package.
             ctx = self.upload_package_task(name, meta, path)
-            status = UploadPackageStatus.FINISHED if not ctx.failed else UploadPackageStatus.FAILED
+            status = UploadPackageStatus.SUCCEEDED if not ctx.failed else UploadPackageStatus.FAILED
             return UploadPackageResult(
                     status=status,
                     message=ctx.message,
@@ -326,8 +329,51 @@ class GitHubPkgRepo(PkgRepo):
                     message=f'Upload task created with task_id={task_id}',
             )
 
-    def show_task_upload_package(self, name: str, task_id: str):
-        raise NotImplementedError()
+    def view_task_upload_package(self, name: str, task_id: str):
+        if not self.local_paths.stat:
+            status = UploadPackageStatus.FAILED
+            message = 'stat path not set.'
+
+        elif file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
+            logging_path = self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id)
+            if not os.path.exists(logging_path):
+                status = UploadPackageStatus.FAILED
+                message = 'Task is running but cannot find the log.'
+
+            try:
+                # TODO: This might cause read-write conflcit, but should be rare.
+                # Will attach lock if encounter error.
+                with open(logging_path) as fin:
+                    message = fin.read()
+                status = UploadPackageStatus.TASK_CREATED
+
+            except IOError:
+                status = UploadPackageStatus.FAILED
+                message = 'Task is running but cannot read the log (IOError).'
+
+        else:
+            finalstat_status, finalstat = locked_read_toml(
+                    self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    timeout=LOCK_TIMEOUT,
+            )
+            if finalstat_status:
+                if finalstat is not None:
+                    # Succeeded.
+                    status = UploadPackageStatus.SUCCEEDED \
+                            if not finalstat['failed'] else UploadPackageStatus.FAILED
+                    message = finalstat['logging_message']
+                else:
+                    # No final state.
+                    status = UploadPackageStatus.FAILED
+                    message = ('Task is not runnng and there\'s no final result'
+                               f'(name={name}, task_id={task_id}) should be incorrect.')
+            else:
+                # Corrupted lock.
+                status = UploadPackageStatus.FAILED
+                message = 'Lock corrupted (lock not busy, finalstat_lock busy). Please help report this bug.'
+
+        return UploadPackageResult(status=status, task_id=task_id, message=message)
 
     def _get_published_release(self, ctx: UploadAndDownloadPackageContext):
         try:
@@ -359,7 +405,7 @@ class GitHubPkgRepo(PkgRepo):
     def download_package(self, name: str, output: str):
         raise NotImplementedError()
 
-    def show_task_download_package(self, name: str, task_id: str):
+    def view_task_download_package(self, name: str, task_id: str):
         raise NotImplementedError()
 
     def download_index_struct(self):
@@ -416,7 +462,7 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
                     args['task_paths']['runstat_lock'],
                     args['task_paths']['runstat'],
                     task_dict,
-                    timeout=1.0,
+                    timeout=LOCK_TIMEOUT,
             ):
                 logger_stderr.error('blocked for writing to runstat.')
                 return 1
@@ -447,7 +493,7 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
                         'failed': failed,
                         'logging_message': logging_message,
                 },
-                timeout=1.0,
+                timeout=LOCK_TIMEOUT,
         )
 
         flock.release()

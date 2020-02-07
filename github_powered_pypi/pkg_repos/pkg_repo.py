@@ -21,7 +21,7 @@ class LocalPaths:
 
 
 class UploadPackageStatus(Enum):
-    FINISHED = auto()
+    SUCCEEDED = auto()
     FAILED = auto()
     TASK_CREATED = auto()
 
@@ -61,7 +61,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def show_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
+    def view_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
         pass
 
     @abstractmethod
@@ -69,7 +69,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def show_task_download_package(self, name: str, task_id: str) -> DownloadPackageResult:
+    def view_task_download_package(self, name: str, task_id: str) -> DownloadPackageResult:
         pass
 
     @abstractmethod
