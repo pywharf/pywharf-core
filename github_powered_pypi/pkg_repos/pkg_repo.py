@@ -1,6 +1,6 @@
-from typing import Dict
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Dict, Optional
 
 
 @dataclass
@@ -15,8 +15,8 @@ class PkgRepoSecret:
 
 @dataclass
 class LocalPaths:
-    stat: str = None
-    cache: str = None
+    stat: Optional[str] = None
+    cache: Optional[str] = None
 
 
 class UploadPackageStatus(Enum):
@@ -29,7 +29,7 @@ class UploadPackageStatus(Enum):
 class UploadPackageResult:
     status: UploadPackageStatus
     message: str = ''
-    task_id: str = None
+    task_id: Optional[str] = None
 
 
 class DownloadPackageStatus(Enum):

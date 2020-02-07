@@ -1,26 +1,26 @@
-import logging
-from dataclasses import dataclass, asdict
-from typing import Dict
+import contextlib
+from dataclasses import asdict, dataclass
 from enum import Enum, auto
+import logging
 import os
 import os.path
 import subprocess
-import contextlib
 import traceback
+from typing import Callable, Dict, Optional, TextIO
 
-import github
-import toml
 from filelock import FileLock
-import shortuuid
 import fire
+import github
+import shortuuid
+import toml
 
 from github_powered_pypi.pkg_repos.pkg_repo import (
-        PkgRepoConfig,
-        PkgRepoSecret,
         LocalPaths,
         PkgRepo,
-        UploadPackageStatus,
+        PkgRepoConfig,
+        PkgRepoSecret,
         UploadPackageResult,
+        UploadPackageStatus,
 )
 
 
@@ -33,7 +33,7 @@ class GitHubConfig(PkgRepoConfig):
 
 @dataclass
 class GitHubAuthToken(PkgRepoSecret):
-    token: str = None
+    token: Optional[str] = None
 
     def __post_init__(self):
         self.token = self.raw
@@ -47,8 +47,8 @@ class TaskType(Enum):
 @dataclass
 class UploadAndDownloadPackageContext:
     name: str
-    meta: Dict[str, str] = None
-    path: bytes = None
+    meta: Optional[Dict[str, str]] = None
+    path: Optional[str] = None
     release: github.GitRelease.GitRelease = None
     failed: bool = False
     message: str = ''
@@ -149,6 +149,7 @@ class GitHubPkgRepo(PkgRepo):
         return f'{self.config.name}-{task_type.name.lower()}-{name}'
 
     def task_lock_path(self, task_type: TaskType, name: str):
+        assert isinstance(self.local_paths.stat, str)
         return os.path.join(self.local_paths.stat, f'{self._task_name(task_type, name)}.lock')
 
     def task_lock_busy(self, task_type: TaskType, name: str):
@@ -163,6 +164,7 @@ class GitHubPkgRepo(PkgRepo):
         return busy
 
     def task_logging_path(self, task_type: TaskType, name: str, task_id: str):
+        assert isinstance(self.local_paths.stat, str)
         return os.path.join(self.local_paths.stat,
                             f'{self._task_name(task_type, name)}-{task_id}.log')
 
@@ -170,6 +172,7 @@ class GitHubPkgRepo(PkgRepo):
         return os.path.exists(self.task_logging_path(task_type, name, task_id))
 
     def task_args_path(self, task_type: TaskType, name: str, task_id: str):
+        assert isinstance(self.local_paths.stat, str)
         return os.path.join(self.local_paths.stat,
                             f'{self._task_name(task_type, name)}-{task_id}.args')
 
@@ -232,7 +235,7 @@ class GitHubPkgRepo(PkgRepo):
                     },
             )
             subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-                    ['github_upload_package', args_path],
+                    ['github_upload_package', args_path, '--remove_args_path'],
                     env=dict(os.environ),
                     preexec_fn=os.setpgrp,
             )
@@ -289,18 +292,31 @@ class GitHubPkgRepo(PkgRepo):
         raise NotImplementedError()
 
 
-def github_upload_package(args_path):
+@dataclass
+class FileLikeObject(TextIO):  # pylint: disable=abstract-method
+    write_func: Callable
+
+    def write(self, s: str) -> int:
+        self.write_func(s)
+        return 0
+
+
+def github_upload_package(args_path: str, remove_args_path: bool = False):
     args = read_args(args_path)
+
+    if remove_args_path:
+        os.remove(args_path)
+
     repo_dict = args['repo_dict']
     task_dict = args['task_dict']
 
     logging.basicConfig(level=logging.INFO, filename=args['logging_path'])
 
     logger_stdout = logging.getLogger('stdout')
-    logger_stdout.write = logger_stdout.info
+    file_like_stdout = FileLikeObject(logger_stdout.info)
 
     logger_stderr = logging.getLogger('stderr')
-    logger_stderr.write = logger_stderr.error
+    file_like_stderr = FileLikeObject(logger_stderr.error)
 
     logger_stdout.info('ENV: %s', os.environ)
 
@@ -308,7 +324,8 @@ def github_upload_package(args_path):
     flock.acquire()
 
     try:
-        with contextlib.redirect_stdout(logger_stdout), contextlib.redirect_stderr(logger_stderr):
+        with contextlib.redirect_stdout(file_like_stdout), \
+                contextlib.redirect_stderr(file_like_stderr):
             repo = GitHubPkgRepo(
                     config=GitHubConfig(**repo_dict['config']),
                     secret=GitHubAuthToken(**repo_dict['secret']),
