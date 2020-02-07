@@ -44,7 +44,6 @@ class DownloadPackageResult:
 
 @dataclass
 class PkgRef:
-    # https://www.python.org/dev/peps/pep-0503/#normalized-names
     distrib: str
     filename: str
     sha256: str

@@ -7,6 +7,8 @@ import os.path
 import subprocess
 import traceback
 from typing import Callable, Dict, Optional, TextIO, Tuple, List
+import re
+import hashlib
 
 from filelock import FileLock
 import fire
@@ -107,8 +109,8 @@ class TaskPath:
 @dataclass
 class UploadAndDownloadPackageContext:
     filename: str
+    path: str
     meta: Optional[Dict[str, str]] = None
-    path: Optional[str] = None
     release: github.GitRelease.GitRelease = None
     failed: bool = False
     message: str = ''
@@ -263,6 +265,23 @@ class GitHubPkgRepo(PkgRepo):
             ctx.message = 'github exception in asset upload.\n' + str(ex.data)
 
     def _fill_meta_and_publish_release(self, ctx: UploadAndDownloadPackageContext):  # pylint: disable=no-self-use
+        # Fill distribution name.
+        # https://www.python.org/dev/peps/pep-0503/#normalized-names
+        if not ctx.meta.get('distrib'):
+            name = ctx.meta.get('name')
+            if name:
+                ctx.meta['distrib'] = re.sub(r"[-_.]+", "-", name).lower()
+
+        # SHA256 checksum, also suggested by PEP-503.
+        if not ctx.meta.get('sha256'):
+            sha256_algo = hashlib.sha256()
+            with open(ctx.path, 'rb') as f:
+                # 64KB block.
+                for block in iter(lambda: f.read(65536), b''):
+                    sha256_algo.update(block)
+
+            ctx.meta['sha256'] = sha256_algo.hexdigest()
+
         body = toml.dumps(ctx.meta)
         try:
             ctx.release.update_release(
