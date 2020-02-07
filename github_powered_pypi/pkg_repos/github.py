@@ -6,7 +6,7 @@ import os
 import os.path
 import subprocess
 import traceback
-from typing import Callable, Dict, Optional, TextIO, Tuple
+from typing import Callable, Dict, Optional, TextIO, Tuple, List
 
 from filelock import FileLock
 import fire
@@ -21,6 +21,7 @@ from github_powered_pypi.pkg_repos.pkg_repo import (
         PkgRepoSecret,
         UploadPackageResult,
         UploadPackageStatus,
+        PkgRef,
 )
 
 
@@ -46,12 +47,23 @@ class TaskType(Enum):
 
 @dataclass
 class UploadAndDownloadPackageContext:
-    name: str
+    filename: str
     meta: Optional[Dict[str, str]] = None
     path: Optional[str] = None
     release: github.GitRelease.GitRelease = None
     failed: bool = False
     message: str = ''
+
+
+@dataclass
+class GitHubPkgRef(PkgRef):
+    browser_download_url: str
+
+    def __post_init__(self):
+        pass
+
+    def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
+        return ''
 
 
 def write_args(path, args):
@@ -122,8 +134,8 @@ class GitHubPkgRepo(PkgRepo):
         try:
             self._gh_client: github.Github = github.Github(self.secret.token)
             self._gh_fullname = f'{self.config.owner}/{self.config.repo}'
-            self._gh_repo: github.Repository.Repository = self._gh_client.get_repo(
-                    self._gh_fullname)
+            self._gh_repo: github.Repository.Repository = \
+                    self._gh_client.get_repo(self._gh_fullname)
             self._gh_username: str = self._gh_client.get_user().login
             self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
 
@@ -145,9 +157,9 @@ class GitHubPkgRepo(PkgRepo):
 
     def _check_published_release_not_exists(self, ctx: UploadAndDownloadPackageContext):
         try:
-            self._gh_repo.get_release(ctx.name)
+            self._gh_repo.get_release(ctx.filename)
             ctx.failed = True
-            ctx.message = f'package={ctx.name} has already exists.'
+            ctx.message = f'package={ctx.filename} has already exists.'
 
         except github.UnknownObjectException:
             # Release not exists, do nothing.
@@ -155,7 +167,7 @@ class GitHubPkgRepo(PkgRepo):
 
         except github.BadCredentialsException:
             ctx.failed = True
-            ctx.message = f'cannot get package={ctx.name} due to invalid credential.'
+            ctx.message = f'cannot get package={ctx.filename} due to invalid credential.'
 
         except github.GithubException as ex:
             ctx.failed = True
@@ -164,15 +176,15 @@ class GitHubPkgRepo(PkgRepo):
     def _create_draft_release(self, ctx: UploadAndDownloadPackageContext):
         try:
             ctx.release = self._gh_repo.create_git_release(
-                    tag=ctx.name,
-                    name=ctx.name,
+                    tag=ctx.filename,
+                    name=ctx.filename,
                     message='',
                     draft=True,
             )
 
         except github.BadCredentialsException:
             ctx.failed = True
-            ctx.message = f'cannot upload package={ctx.name} due to invalid credential.'
+            ctx.message = f'cannot upload package={ctx.filename} due to invalid credential.'
 
         except github.GithubException as ex:
             ctx.failed = True
@@ -184,7 +196,7 @@ class GitHubPkgRepo(PkgRepo):
             ctx.release.upload_asset(
                     ctx.path,
                     content_type='application/zip',
-                    name=ctx.name,
+                    name=ctx.filename,
             )
 
         except github.GithubException as ex:
@@ -195,8 +207,8 @@ class GitHubPkgRepo(PkgRepo):
         body = toml.dumps(ctx.meta)
         try:
             ctx.release.update_release(
-                    tag_name=ctx.name,
-                    name=ctx.name,
+                    tag_name=ctx.filename,
+                    name=ctx.filename,
                     message=body,
                     draft=False,
             )
@@ -205,49 +217,49 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in release publishing.\n' + str(ex.data)
 
-    def _path_join_stat(self, fname: str):
+    def _path_join_stat(self, filename: str):
         assert isinstance(self.local_paths.stat, str)
-        return os.path.join(self.local_paths.stat, fname)
+        return os.path.join(self.local_paths.stat, filename)
 
     # <task_type>-<distribution>
-    def _task_name(self, task_type: TaskType, name: str):
-        return f'{self.config.name}-{task_type.name.lower()}-{name}'
+    def _task_name(self, task_type: TaskType, filename: str):
+        return f'{self.config.name}-{task_type.name.lower()}-{filename}'
 
-    def task_lock_path(self, task_type: TaskType, name: str):
-        return self._path_join_stat(f'{self._task_name(task_type, name)}.lock')
+    def task_lock_path(self, task_type: TaskType, filename: str):
+        return self._path_join_stat(f'{self._task_name(task_type, filename)}.lock')
 
     # task_runstat: metadata of the running task like task id.
-    def task_runstat_lock_path(self, task_type: TaskType, name: str):
-        return self._path_join_stat(f'{self._task_name(task_type, name)}.runstat.lock')
+    def task_runstat_lock_path(self, task_type: TaskType, filename: str):
+        return self._path_join_stat(f'{self._task_name(task_type, filename)}.runstat.lock')
 
-    def task_runstat_path(self, task_type: TaskType, name: str):
-        return self._path_join_stat(f'{self._task_name(task_type, name)}.runstat')
+    def task_runstat_path(self, task_type: TaskType, filename: str):
+        return self._path_join_stat(f'{self._task_name(task_type, filename)}.runstat')
 
     # <task_type>-<distribution>-<task_id>
-    def _task_name_id(self, task_type: TaskType, name: str, task_id: str):
-        return f'{self._task_name(task_type, name)}-{task_id}'
+    def _task_name_id(self, task_type: TaskType, filename: str, task_id: str):
+        return f'{self._task_name(task_type, filename)}-{task_id}'
 
     # task_args: the input of task.
-    def task_args_path(self, task_type: TaskType, name: str, task_id: str):
-        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.args')
+    def task_args_path(self, task_type: TaskType, filename: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, filename, task_id)}.args')
 
     # task_logging: the logging of task.
-    def task_logging_lock_path(self, task_type: TaskType, name: str, task_id: str):
-        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.log.lock')
+    def task_logging_lock_path(self, task_type: TaskType, filename: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, filename, task_id)}.log.lock')
 
-    def task_logging_path(self, task_type: TaskType, name: str, task_id: str):
-        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.log')
+    def task_logging_path(self, task_type: TaskType, filename: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, filename, task_id)}.log')
 
     # task_final: metadata of the final result.
-    def task_finalstat_lock_path(self, task_type: TaskType, name: str, task_id: str):
+    def task_finalstat_lock_path(self, task_type: TaskType, filename: str, task_id: str):
         return self._path_join_stat(
-                f'{self._task_name_id(task_type, name, task_id)}.finalstat.lock')
+                f'{self._task_name_id(task_type, filename, task_id)}.finalstat.lock')
 
-    def task_finalstat_path(self, task_type: TaskType, name: str, task_id: str):
-        return self._path_join_stat(f'{self._task_name_id(task_type, name, task_id)}.finalstat')
+    def task_finalstat_path(self, task_type: TaskType, filename: str, task_id: str):
+        return self._path_join_stat(f'{self._task_name_id(task_type, filename, task_id)}.finalstat')
 
-    def upload_package_task(self, name: str, meta: Dict[str, str], path: str):
-        ctx = UploadAndDownloadPackageContext(name=name, meta=meta, path=path)
+    def upload_package_task(self, filename: str, meta: Dict[str, str], path: str):
+        ctx = UploadAndDownloadPackageContext(filename=filename, meta=meta, path=path)
 
         for action in (
                 self._check_published_release_not_exists,
@@ -261,17 +273,17 @@ class GitHubPkgRepo(PkgRepo):
 
         return ctx
 
-    def upload_package(self, name: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
+    def upload_package(self, filename: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
         if not self.local_paths.stat:
             return UploadPackageResult(
                     status=UploadPackageStatus.FAILED,
                     message='stat path not set.',
             )
 
-        if file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
+        if file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, filename)):
             runstat_status, runstat = locked_read_toml(
-                    self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
-                    self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
+                    self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, filename),
+                    self.task_runstat_path(TaskType.UPLOAD_PACKAGE, filename),
                     timeout=LOCK_TIMEOUT,
             )
             return UploadPackageResult(
@@ -282,7 +294,7 @@ class GitHubPkgRepo(PkgRepo):
 
         if os.path.getsize(path) < self.config.large_package_bytes:
             # Small package.
-            ctx = self.upload_package_task(name, meta, path)
+            ctx = self.upload_package_task(filename, meta, path)
             status = UploadPackageStatus.SUCCEEDED if not ctx.failed else UploadPackageStatus.FAILED
             return UploadPackageResult(
                     status=status,
@@ -292,31 +304,32 @@ class GitHubPkgRepo(PkgRepo):
         else:
             # Large package.
             task_id = shortuuid.ShortUUID().random(length=6)
-            args_path = self.task_args_path(TaskType.UPLOAD_PACKAGE, name, task_id)
+            args_path = self.task_args_path(TaskType.UPLOAD_PACKAGE, filename, task_id)
 
             repo_dict = asdict(self)
             # TODO: dataclass.
             task_dict = {
-                    'name': name,
+                    'filename': filename,
                     'meta': meta,
                     'path': path,
                     'task_id': task_id,
             }
             task_paths = {
                     'lock':
-                            self.task_lock_path(TaskType.UPLOAD_PACKAGE, name),
+                            self.task_lock_path(TaskType.UPLOAD_PACKAGE, filename),
                     'runstat_lock':
-                            self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, name),
+                            self.task_runstat_lock_path(TaskType.UPLOAD_PACKAGE, filename),
                     'runstat':
-                            self.task_runstat_path(TaskType.UPLOAD_PACKAGE, name),
+                            self.task_runstat_path(TaskType.UPLOAD_PACKAGE, filename),
                     'logging_lock':
-                            self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                            self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
                     'logging':
-                            self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                            self.task_logging_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
                     'finalstat_lock':
-                            self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                            self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, filename,
+                                                          task_id),
                     'finalstat':
-                            self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                            self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
             }
 
             write_args(
@@ -344,15 +357,15 @@ class GitHubPkgRepo(PkgRepo):
                     message=f'Upload task created with task_id={task_id}',
             )
 
-    def view_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
+    def view_task_upload_package(self, filename: str, task_id: str) -> UploadPackageResult:
         if not self.local_paths.stat:
             status = UploadPackageStatus.FAILED
             message = 'stat path not set.'
 
-        elif file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, name)):
+        elif file_lock_is_busy(self.task_lock_path(TaskType.UPLOAD_PACKAGE, filename)):
             logging_message_status, logging_message = locked_read_file(
-                    self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
-                    self.task_logging_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    self.task_logging_lock_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
+                    self.task_logging_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
                     timeout=LOCK_TIMEOUT,
             )
 
@@ -370,8 +383,8 @@ class GitHubPkgRepo(PkgRepo):
 
         else:
             finalstat_status, finalstat = locked_read_toml(
-                    self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, name, task_id),
-                    self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, name, task_id),
+                    self.task_finalstat_lock_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
+                    self.task_finalstat_path(TaskType.UPLOAD_PACKAGE, filename, task_id),
                     timeout=LOCK_TIMEOUT,
             )
             if finalstat_status:
@@ -384,7 +397,7 @@ class GitHubPkgRepo(PkgRepo):
                     # No final state.
                     status = UploadPackageStatus.FAILED
                     message = ('Task is not runnng and there\'s no final result'
-                               f'(name={name}, task_id={task_id}) should be incorrect.')
+                               f'(filename={filename}, task_id={task_id}) should be incorrect.')
             else:
                 # Corrupted lock.
                 status = UploadPackageStatus.FAILED
@@ -394,15 +407,15 @@ class GitHubPkgRepo(PkgRepo):
 
     def _get_published_release(self, ctx: UploadAndDownloadPackageContext):
         try:
-            ctx.release = self._gh_repo.get_release(ctx.name)
+            ctx.release = self._gh_repo.get_release(ctx.filename)
 
         except github.UnknownObjectException:
             ctx.failed = True
-            ctx.message = f'package={ctx.name} not exists.'
+            ctx.message = f'package={ctx.filename} not exists.'
 
         except github.BadCredentialsException:
             ctx.failed = True
-            ctx.message = f'cannot get package={ctx.name} due to invalid credential.'
+            ctx.message = f'cannot get package={ctx.filename} due to invalid credential.'
 
         except github.GithubException as ex:
             ctx.failed = True
@@ -419,13 +432,13 @@ class GitHubPkgRepo(PkgRepo):
     def _download_release_asset(self, ctx: UploadAndDownloadPackageContext):
         pass
 
-    def download_package(self, name: str, output: str):
+    def download_package(self, filename: str, output: str):
         raise NotImplementedError()
 
-    def view_task_download_package(self, name: str, task_id: str):
+    def view_task_download_package(self, filename: str, task_id: str):
         raise NotImplementedError()
 
-    def collect_all_published_packages(self):
+    def collect_all_published_packages(self) -> List[GitHubPkgRef]:
         raise NotImplementedError()
 
     def upload_index(self, path: str):
@@ -488,7 +501,11 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
 
             lfl_stdout.write('Task={} created'.format(task_dict['task_id']))
 
-            ctx = repo.upload_package_task(task_dict['name'], task_dict['meta'], task_dict['path'])
+            ctx = repo.upload_package_task(
+                    task_dict['filename'],
+                    task_dict['meta'],
+                    task_dict['path'],
+            )
             failed = ctx.failed
 
             lfl_stdout.write('Task failed: {}'.format(ctx.failed))

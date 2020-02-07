@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 
 @dataclass
@@ -43,6 +43,19 @@ class DownloadPackageResult:
 
 
 @dataclass
+class PkgRef:
+    # https://www.python.org/dev/peps/pep-0503/#normalized-names
+    distrib: str
+    filename: str
+    sha256: str
+    meta: Dict[str, str]
+
+    @abstractmethod
+    def auth_url(self, config: PkgRepoConfig, secret: PkgRepoSecret) -> str:
+        pass
+
+
+@dataclass
 class PkgRepo:
     config: PkgRepoConfig
     secret: PkgRepoSecret
@@ -61,23 +74,23 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def upload_package(self, name: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
+    def upload_package(self, filename: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
         pass
 
     @abstractmethod
-    def view_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
+    def view_task_upload_package(self, filename: str, task_id: str) -> UploadPackageResult:
         pass
 
     @abstractmethod
-    def download_package(self, name: str, output: str) -> DownloadPackageResult:
+    def download_package(self, filename: str, output: str) -> DownloadPackageResult:
         pass
 
     @abstractmethod
-    def view_task_download_package(self, name: str, task_id: str) -> DownloadPackageResult:
+    def view_task_download_package(self, filename: str, task_id: str) -> DownloadPackageResult:
         pass
 
     @abstractmethod
-    def collect_all_published_packages(self):
+    def collect_all_published_packages(self) -> List[PkgRef]:
         pass
 
     @abstractmethod
