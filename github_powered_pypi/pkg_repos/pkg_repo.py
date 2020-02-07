@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 @dataclass
@@ -49,6 +49,10 @@ class PkgRepo:
     local_paths: LocalPaths
 
     @abstractmethod
+    def ready(self) -> Tuple[bool, str]:
+        pass
+
+    @abstractmethod
     def auth_read(self) -> bool:
         pass
 
@@ -73,7 +77,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def download_index_struct(self):
+    def collect_all_published_packages(self):
         pass
 
     @abstractmethod
@@ -81,5 +85,5 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def download_index(self):
+    def download_index(self, output: str):
         pass

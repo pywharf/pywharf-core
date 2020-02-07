@@ -6,7 +6,7 @@ import os
 import os.path
 import subprocess
 import traceback
-from typing import Callable, Dict, Optional, TextIO
+from typing import Callable, Dict, Optional, TextIO, Tuple
 
 from filelock import FileLock
 import fire
@@ -119,16 +119,28 @@ class GitHubPkgRepo(PkgRepo):
 
     def __post_init__(self):
         # pylint: disable=attribute-defined-outside-init
-        self._gh_client: github.Github = github.Github(self.secret.token)
-        self._gh_fullname = f'{self.config.owner}/{self.config.repo}'
-        self._gh_repo: github.Repository.Repository = self._gh_client.get_repo(self._gh_fullname)
-        self._gh_username: str = self._gh_client.get_user().login
-        self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
+        try:
+            self._gh_client: github.Github = github.Github(self.secret.token)
+            self._gh_fullname = f'{self.config.owner}/{self.config.repo}'
+            self._gh_repo: github.Repository.Repository = self._gh_client.get_repo(
+                    self._gh_fullname)
+            self._gh_username: str = self._gh_client.get_user().login
+            self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
 
-    def auth_read(self):
+            self._ready = True
+            self._init_msg = ''
+
+        except:  # pylint: disable=bare-except
+            self._ready = False
+            self._init_msg = traceback.format_exc()
+
+    def ready(self) -> Tuple[bool, str]:
+        return self._ready, self._init_msg
+
+    def auth_read(self) -> bool:
         return self._gh_permission != 'none'
 
-    def auth_write(self):
+    def auth_write(self) -> bool:
         return self._gh_permission in ('admin', 'write')
 
     def _check_published_release_not_exists(self, ctx: UploadAndDownloadPackageContext):
@@ -249,7 +261,7 @@ class GitHubPkgRepo(PkgRepo):
 
         return ctx
 
-    def upload_package(self, name: str, meta: Dict[str, str], path: str):
+    def upload_package(self, name: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
         if not self.local_paths.stat:
             return UploadPackageResult(
                     status=UploadPackageStatus.FAILED,
@@ -332,7 +344,7 @@ class GitHubPkgRepo(PkgRepo):
                     message=f'Upload task created with task_id={task_id}',
             )
 
-    def view_task_upload_package(self, name: str, task_id: str):
+    def view_task_upload_package(self, name: str, task_id: str) -> UploadPackageResult:
         if not self.local_paths.stat:
             status = UploadPackageStatus.FAILED
             message = 'stat path not set.'
@@ -413,13 +425,13 @@ class GitHubPkgRepo(PkgRepo):
     def view_task_download_package(self, name: str, task_id: str):
         raise NotImplementedError()
 
-    def download_index_struct(self):
+    def collect_all_published_packages(self):
         raise NotImplementedError()
 
     def upload_index(self, path: str):
         raise NotImplementedError()
 
-    def download_index(self):
+    def download_index(self, output: str):
         raise NotImplementedError()
 
 
