@@ -53,6 +53,11 @@ class GitHubAuthToken(PkgRepoSecret):
     def __post_init__(self):
         self.token = self.raw
 
+    def secret_hash(self) -> str:
+        sha256_algo = hashlib.sha256()
+        sha256_algo.update(self.token.encode())
+        return f'github-{sha256_algo.hexdigest()}'
+
 
 class TaskType(Enum):
     UPLOAD_PACKAGE = auto()

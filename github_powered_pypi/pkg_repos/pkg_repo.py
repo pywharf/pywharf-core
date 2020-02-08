@@ -15,6 +15,10 @@ class PkgRepoConfig:
 class PkgRepoSecret:
     raw: str
 
+    @abstractmethod
+    def secret_hash(self) -> str:
+        pass
+
 
 @dataclass
 class LocalPaths:

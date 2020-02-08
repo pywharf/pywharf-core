@@ -66,7 +66,7 @@ def run_server(
         stat=None,
         cache=None,
         host='localhost',
-        port='80',
+        port=80,
         auth_read_expires=3600,
         auth_write_expires=300,
         cert=None,
