@@ -37,11 +37,13 @@ class SecretHashedStorage(Generic[SHST]):
 
 @dataclass
 class WorkflowStat:
-    name_to_pkg_repo_type: Dict[str, PkgRepoType]
     # Package repository configs.
+    name_to_pkg_repo_type: Dict[str, PkgRepoType]
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
+
     # Package index paths [(<lock-path>, <toml-path>)...]
     name_to_index_paths: Dict[str, Tuple[str, str]]
+
     # Locked package repos.
     auth_read_expires: int
     auth_write_expires: int
@@ -49,8 +51,10 @@ class WorkflowStat:
     name_to_pkg_repo_lock_shstg: DefaultDict[str, SecretHashedStorage[threading.RLock]]
     name_to_pkg_repo_shstg: DefaultDict[str, SecretHashedStorage[PkgRepo]]
     name_to_pkg_repo_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
+
     # Local paths.
     local_paths: LocalPaths
+    upload_folder: Optional[str]
 
 
 def load_pkg_repo_configs(
@@ -81,6 +85,7 @@ def build_workflow_stat(
         pkg_repo_config: str,
         index_folder: str,
         stat_folder: Optional[str],
+        upload_folder: Optional[str],
         cache_folder: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
@@ -111,6 +116,7 @@ def build_workflow_stat(
             name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
+            upload_folder=upload_folder,
     )
 
 
