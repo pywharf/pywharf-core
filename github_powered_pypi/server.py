@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 from typing import List
 
+from flask import Flask, current_app
 from jinja2 import Template
 
 from github_powered_pypi.pkg_repos import PkgRef
 from github_powered_pypi.pkg_repo_index import PkgRepoIndex
+from github_powered_pypi.workflow import build_workflow_stat
 
 
 @dataclass
@@ -52,4 +54,48 @@ def build_distribution_page(distrib: str, pkg_refs: List[PkgRef]) -> str:
     return PAGE_TEMPLATE.render(
             title=f'Links for {distrib}',
             link_items=link_items,
+    )
+
+
+app = Flask(__name__)  # pylint: disable=invalid-name
+
+
+def run_server(
+        pkg_repo_config,
+        index,
+        stat=None,
+        cache=None,
+        host='localhost',
+        port='80',
+        auth_read_expires=3600,
+        auth_write_expires=300,
+        cert=None,
+        pkey=None,
+):
+
+    with app.app_context():
+        # Init.
+        current_app.workflow_stat = build_workflow_stat(
+                pkg_repo_config=pkg_repo_config,
+                index_folder=index,
+                stat_folder=stat,
+                cache_folder=cache,
+                auth_read_expires=auth_read_expires,
+                auth_write_expires=auth_write_expires,
+        )
+
+    ssl_context = None
+    if cert and pkey:
+        ssl_context = (cert, pkey)
+
+    app.run(
+            host=host,
+            port=port,
+            load_dotenv=False,
+            # Must be threaded for the current design.
+            threaded=True,
+            # SSL.
+            # https://werkzeug.palletsprojects.com/en/0.16.x/serving/#werkzeug.serving.run_simple
+            # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
+            ssl_context=ssl_context,
     )
