@@ -1,7 +1,9 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, Optional, Tuple, List
+import functools
+import traceback
+from typing import Dict, List, Optional, Tuple, TypeVar
 
 
 @dataclass
@@ -62,6 +64,10 @@ class PkgRepo:
     local_paths: LocalPaths
 
     @abstractmethod
+    def record_error(self, error_message: str) -> None:
+        pass
+
+    @abstractmethod
     def ready(self) -> Tuple[bool, str]:
         pass
 
@@ -104,3 +110,20 @@ class PkgRepo:
     @abstractmethod
     def download_index(self, output: str):
         pass
+
+
+METHOD = TypeVar('METHOD')
+
+
+def record_error_if_raises(method: METHOD) -> METHOD:
+
+    @functools.wraps(method)
+    def decorated(self, *args, **kwargs):
+        try:
+            ret = method(self, *args, **kwargs)
+            return ret
+        except:
+            self.record_error(traceback.format_exc())
+            raise
+
+    return decorated

@@ -25,16 +25,17 @@ from github_powered_pypi.pkg_repos.pkg_repo import (
         PkgRepoSecret,
         UploadPackageResult,
         UploadPackageStatus,
+        record_error_if_raises,
 )
 from github_powered_pypi.utils import (
+        LockedFileLikeObject,
         file_lock_is_busy,
         locked_read_file,
         locked_read_toml,
         locked_write_toml,
+        normalize_distribution_name,
         read_toml,
         write_toml,
-        normalize_distribution_name,
-        LockedFileLikeObject,
 )
 
 
@@ -172,6 +173,9 @@ class GitHubPkgRepo(PkgRepo):
 
     def __post_init__(self):
         # pylint: disable=attribute-defined-outside-init
+        self._ready = True
+        self._err_msg = ''
+
         try:
             self._gh_client: github.Github = github.Github(self.secret.token)
             self._gh_fullname = f'{self.config.owner}/{self.config.repo}'
@@ -180,15 +184,16 @@ class GitHubPkgRepo(PkgRepo):
             self._gh_username: str = self._gh_client.get_user().login
             self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
 
-            self._ready = True
-            self._init_msg = ''
-
         except:  # pylint: disable=bare-except
-            self._ready = False
-            self._init_msg = traceback.format_exc()
+            self.record_error(traceback.format_exc())
+
+    def record_error(self, error_message: str) -> None:
+        # pylint: disable=attribute-defined-outside-init
+        self._ready = False
+        self._err_msg = error_message
 
     def ready(self) -> Tuple[bool, str]:
-        return self._ready, self._init_msg
+        return self._ready, self._err_msg
 
     def auth_read(self) -> bool:
         return self._gh_permission != 'none'
@@ -289,6 +294,7 @@ class GitHubPkgRepo(PkgRepo):
 
         return ctx
 
+    @record_error_if_raises
     def upload_package(self, filename: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
         if not self.local_paths.stat:
             return UploadPackageResult(
@@ -370,6 +376,7 @@ class GitHubPkgRepo(PkgRepo):
                     message=f'Upload task created with task_id={task_id}',
             )
 
+    @record_error_if_raises
     def view_task_upload_package(self, filename: str, task_id: str) -> UploadPackageResult:
         task_path = TaskPath(
                 config_name=self.config.name,
@@ -454,15 +461,19 @@ class GitHubPkgRepo(PkgRepo):
     def _download_release_asset(self, ctx: UploadAndDownloadPackageContext):
         pass
 
+    @record_error_if_raises
     def download_package(self, filename: str, output: str):
         raise NotImplementedError()
 
+    @record_error_if_raises
     def view_task_download_package(self, filename: str, task_id: str):
         raise NotImplementedError()
 
+    @record_error_if_raises
     def delete_package(self, filename: str) -> bool:
         raise NotImplementedError()
 
+    @record_error_if_raises
     def collect_all_published_packages(self) -> List[GitHubPkgRef]:
         pkg_refs: List[GitHubPkgRef] = []
 
@@ -508,9 +519,11 @@ class GitHubPkgRepo(PkgRepo):
 
         return pkg_refs
 
+    @record_error_if_raises
     def upload_index(self, path: str):
         raise NotImplementedError()
 
+    @record_error_if_raises
     def download_index(self, output: str):
         raise NotImplementedError()
 
