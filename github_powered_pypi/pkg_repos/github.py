@@ -5,7 +5,6 @@ import hashlib
 import logging
 import os
 import os.path
-import re
 import subprocess
 import traceback
 from typing import Dict, List, Optional, Tuple
@@ -34,6 +33,7 @@ from github_powered_pypi.utils import (
         locked_write_toml,
         read_toml,
         write_toml,
+        normalize_distribution_name,
         LockedFileLikeObject,
 )
 
@@ -246,11 +246,10 @@ class GitHubPkgRepo(PkgRepo):
 
     def _fill_meta_and_publish_release(self, ctx: UploadAndDownloadPackageContext):  # pylint: disable=no-self-use
         # Fill distribution name.
-        # https://www.python.org/dev/peps/pep-0503/#normalized-names
         if not ctx.meta.get('distrib'):
             name = ctx.meta.get('name')
             if name:
-                ctx.meta['distrib'] = re.sub(r"[-_.]+", "-", name).lower()
+                ctx.meta['distrib'] = normalize_distribution_name(name)
 
         # SHA256 checksum, also suggested by PEP-503.
         if not ctx.meta.get('sha256'):
@@ -481,8 +480,8 @@ class GitHubPkgRepo(PkgRepo):
             if not distrib or not sha256:
                 continue
 
-            package, _, _ = release.tag_name.rpartition('.')
-            if not package:
+            package, _, ext = release.tag_name.rpartition('.')
+            if not package or not ext:
                 continue
 
             raw_assets = release._rawData.get('assets')  # pylint: disable=protected-access
@@ -500,6 +499,7 @@ class GitHubPkgRepo(PkgRepo):
             pkg_ref = GitHubPkgRef(
                     distrib=distrib,
                     package=package,
+                    ext=ext,
                     sha256=sha256,
                     meta=meta,
                     url=url,

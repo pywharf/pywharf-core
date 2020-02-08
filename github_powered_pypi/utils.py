@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 import os.path
+import re
 from typing import Callable, TextIO
 
 from filelock import FileLock
 import toml
 
 
-def write_toml(path, args):
+def write_toml(path, struct):
     with open(path, 'w') as fout:
-        fout.write(toml.dumps(args))
+        fout.write(toml.dumps(struct))
 
 
 def read_toml(path):
@@ -70,3 +71,8 @@ class LockedFileLikeObject(TextIO):  # pylint: disable=abstract-method
         with FileLock(self.lock_path):
             self.write_func(s)
         return 0
+
+
+def normalize_distribution_name(name: str) -> str:
+    # https://www.python.org/dev/peps/pep-0503/#normalized-names
+    return re.sub(r"[-_.]+", "-", name).lower()

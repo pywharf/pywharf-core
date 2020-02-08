@@ -17,6 +17,7 @@ toml = "^0.10.0"
 filelock = "^3.0.12"
 shortuuid = "^0.5.0"
 fire = "^0.2.1"
+Jinja2 = "^2.11.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
