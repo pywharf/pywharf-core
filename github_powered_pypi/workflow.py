@@ -37,23 +37,26 @@ class SecretHashedStorage(Generic[SHST]):
 
 @dataclass
 class WorkflowStat:
+    name_to_pkg_repo_type: Dict[str, PkgRepoType]
     # Package repository configs.
-    rtype_to_pkg_repo_config: Dict[PkgRepoType, PkgRepoConfig]
+    name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
     # Package index paths [(<lock-path>, <toml-path>)...]
-    rtype_to_index_paths: Dict[PkgRepoType, Tuple[str, str]]
+    name_to_index_paths: Dict[str, Tuple[str, str]]
     # Locked package repos.
     auth_read_expires: int
     auth_write_expires: int
     pkg_repo_global_lock: threading.Lock
-    rtype_to_pkg_repo_lock_shstg: DefaultDict[PkgRepoType, SecretHashedStorage[threading.RLock]]
-    rtype_to_pkg_repo_shstg: DefaultDict[PkgRepoType, SecretHashedStorage[PkgRepo]]
-    rtype_to_pkg_repo_mtime_shstg: DefaultDict[PkgRepoType, SecretHashedStorage[datetime]]
+    name_to_pkg_repo_lock_shstg: DefaultDict[str, SecretHashedStorage[threading.RLock]]
+    name_to_pkg_repo_shstg: DefaultDict[str, SecretHashedStorage[PkgRepo]]
+    name_to_pkg_repo_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
     # Local paths.
     local_paths: LocalPaths
 
 
-def load_pkg_repo_configs(pkg_repo_config: str) -> Dict[PkgRepoType, PkgRepoConfig]:
-    rtype_to_pkg_repo_config: Dict[PkgRepoType, PkgRepoConfig] = {}
+def load_pkg_repo_configs(
+        pkg_repo_config: str) -> Tuple[Dict[str, PkgRepoType], Dict[str, PkgRepoConfig]]:
+    name_to_pkg_repo_type: Dict[str, PkgRepoType] = {}
+    name_to_pkg_repo_config: Dict[str, PkgRepoConfig] = {}
 
     for name, struct in read_toml(pkg_repo_config).items():
         if not isinstance(struct, dict) or 'type' not in struct:
@@ -64,13 +67,14 @@ def load_pkg_repo_configs(pkg_repo_config: str) -> Dict[PkgRepoType, PkgRepoConf
         if not pkg_repo_type:
             raise TypeError(f'Invalid type, name={name}, type={type_}, struct={struct}')
 
-        rtype_to_pkg_repo_config[pkg_repo_type] = create_pkg_repo_config(
+        name_to_pkg_repo_config[name] = create_pkg_repo_config(
                 pkg_repo_type,
                 name=name,
                 **struct,
         )
+        name_to_pkg_repo_type[name] = pkg_repo_type
 
-    return rtype_to_pkg_repo_config
+    return name_to_pkg_repo_type, name_to_pkg_repo_config
 
 
 def build_workflow_stat(
@@ -86,39 +90,40 @@ def build_workflow_stat(
     if not exists(index_folder):
         raise ValueError(f'index_folder={index_folder} not exists.')
 
-    rtype_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config)
+    name_to_pkg_repo_type, name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config)
 
-    rtype_to_index_paths = {}
-    for name in rtype_to_pkg_repo_config:
+    name_to_index_paths = {}
+    for name in name_to_pkg_repo_config:
         index_lock_path = join(index_folder, f'{name}.index.lock')
         index_path = join(index_folder, f'{name}.index')
-        rtype_to_index_paths[name] = (index_lock_path, index_path)
+        name_to_index_paths[name] = (index_lock_path, index_path)
 
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
     return WorkflowStat(
-            rtype_to_pkg_repo_config=rtype_to_pkg_repo_config,
-            rtype_to_index_paths=rtype_to_index_paths,
+            name_to_pkg_repo_type=name_to_pkg_repo_type,
+            name_to_pkg_repo_config=name_to_pkg_repo_config,
+            name_to_index_paths=name_to_index_paths,
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
             pkg_repo_global_lock=threading.Lock(),
-            rtype_to_pkg_repo_lock_shstg=defaultdict(SecretHashedStorage),
-            rtype_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
-            rtype_to_pkg_repo_mtime_shstg=defaultdict(SecretHashedStorage),
+            name_to_pkg_repo_lock_shstg=defaultdict(SecretHashedStorage),
+            name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
+            name_to_pkg_repo_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
     )
 
 
 def should_initialize_pkg_repo(
         wstat: WorkflowStat,
-        pkg_repo_type: PkgRepoType,
+        name: str,
         pkg_repo_secret: PkgRepoSecret,
         check_auth_read: bool,
         pkg_repo_lock: threading.RLock,
 ) -> bool:
     with pkg_repo_lock:
-        pkg_repo_shstg = wstat.rtype_to_pkg_repo_shstg[pkg_repo_type]
-        pkg_repo_mtime_shstg = wstat.rtype_to_pkg_repo_mtime_shstg[pkg_repo_type]
+        pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
+        pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_mtime_shstg[name]
 
         if not pkg_repo_shstg.has_item(pkg_repo_secret):
             # Cannot find the instance.
@@ -142,17 +147,18 @@ def should_initialize_pkg_repo(
 
 def setup_and_authenticate_pkg_repo(
         wstat: WorkflowStat,
-        pkg_repo_type: PkgRepoType,
+        name: str,
         pkg_repo_secret: PkgRepoSecret,
         check_auth_read: bool,
 ) -> Tuple[bool, str]:
     """name has been validated.
     """
-    pkg_repo_config = wstat.rtype_to_pkg_repo_config[pkg_repo_type]
+    pkg_repo_config = wstat.name_to_pkg_repo_config[name]
+    pkg_repo_type = wstat.name_to_pkg_repo_type[name]
 
     # Get package repository lock.
     with wstat.pkg_repo_global_lock:
-        pkg_repo_lock_shstg = wstat.rtype_to_pkg_repo_lock_shstg[pkg_repo_type]
+        pkg_repo_lock_shstg = wstat.name_to_pkg_repo_lock_shstg[name]
 
         if not pkg_repo_lock_shstg.has_item(pkg_repo_secret):
             pkg_repo_lock_shstg.set_item(pkg_repo_secret, threading.RLock())
@@ -160,12 +166,12 @@ def setup_and_authenticate_pkg_repo(
 
     # Prepare the package repository.
     with pkg_repo_lock:
-        pkg_repo_shstg = wstat.rtype_to_pkg_repo_shstg[pkg_repo_type]
-        pkg_repo_mtime_shstg = wstat.rtype_to_pkg_repo_mtime_shstg[pkg_repo_type]
+        pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
+        pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_mtime_shstg[name]
 
         if should_initialize_pkg_repo(
                 wstat,
-                pkg_repo_type,
+                name,
                 pkg_repo_secret,
                 check_auth_read,
                 pkg_repo_lock,

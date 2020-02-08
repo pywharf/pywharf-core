@@ -18,5 +18,5 @@ def test_load_pkg_repo_configs(tmp_path):
     dump_path = str(tmp_path / 'config.toml')
     write_toml(dump_path, {name: gh_config_dict})
 
-    name_to_configs = load_pkg_repo_configs(dump_path)
+    name_to_configs = load_pkg_repo_configs(dump_path)[1]
     assert name_to_configs[name] == gh_config
