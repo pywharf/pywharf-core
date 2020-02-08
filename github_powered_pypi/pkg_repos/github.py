@@ -8,8 +8,8 @@ import os.path
 import re
 import subprocess
 import traceback
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
-from typing import Callable, Dict, List, Optional, TextIO, Tuple
 
 from filelock import FileLock
 import fire
@@ -26,6 +26,15 @@ from github_powered_pypi.pkg_repos.pkg_repo import (
         PkgRepoSecret,
         UploadPackageResult,
         UploadPackageStatus,
+)
+from github_powered_pypi.utils import (
+        file_lock_is_busy,
+        locked_read_file,
+        locked_read_toml,
+        locked_write_toml,
+        read_toml,
+        write_toml,
+        LockedFileLikeObject,
 )
 
 
@@ -151,61 +160,6 @@ class GitHubPkgRef(PkgRef):
         assert not parsed.fragment
 
         return parsed._replace(fragment=f'sha256={self.sha256}').geturl()
-
-
-def write_args(path, args):
-    with open(path, 'w') as fout:
-        fout.write(toml.dumps(args))
-
-
-def read_args(path):
-    with open(path) as fin:
-        return toml.loads(fin.read())
-
-
-def file_lock_is_busy(lock_path):
-    flock = FileLock(lock_path)
-    busy = False
-    try:
-        flock.acquire(timeout=0.1, poll_intervall=0.05)
-    except TimeoutError:
-        busy = True
-    finally:
-        flock.release()
-    return busy
-
-
-def locked_read_file(lock_path, file_path, timeout=-1):
-    try:
-        with FileLock(lock_path, timeout=timeout):
-            if not os.path.exists(file_path):
-                return True, None
-            with open(file_path) as fin:
-                return True, fin.read()
-    except TimeoutError:
-        return False, ''
-
-
-def locked_read_toml(lock_path, file_path, timeout=-1):
-    status, text = locked_read_file(lock_path, file_path, timeout=timeout)
-    struct = None
-    if status and text is not None:
-        struct = toml.loads(text)
-    return status, struct
-
-
-def locked_write_file(lock_path, file_path, text, timeout=-1):
-    try:
-        with FileLock(lock_path, timeout=timeout):
-            with open(file_path, 'w') as fout:
-                fout.write(text)
-            return True
-    except TimeoutError:
-        return False
-
-
-def locked_write_toml(lock_path, file_path, struct, timeout=-1):
-    return locked_write_file(lock_path, file_path, toml.dumps(struct), timeout=timeout)
 
 
 LOCK_TIMEOUT = 0.5
@@ -392,7 +346,7 @@ class GitHubPkgRepo(PkgRepo):
                     'task_id': task_id,
             }
 
-            write_args(
+            write_toml(
                     task_path.args,
                     {
                             'repo_dict': asdict(self),
@@ -406,7 +360,7 @@ class GitHubPkgRepo(PkgRepo):
                     env=dict(os.environ),
                     # Add to the current process group.
                     preexec_fn=os.setpgrp,
-                    # Suppress stdout or stderr.
+                    # Suppress stdout and stderr.
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
             )
@@ -561,28 +515,18 @@ class GitHubPkgRepo(PkgRepo):
         raise NotImplementedError()
 
 
-@dataclass
-class LockedFileLikeObject(TextIO):  # pylint: disable=abstract-method
-    lock_path: str
-    write_func: Callable
-
-    def write(self, s: str) -> int:
-        with FileLock(self.lock_path):
-            self.write_func(s)
-        return 0
-
-
 def github_upload_package(args_path: str, remove_args_path: bool = False):
-    args = read_args(args_path)
+    args = read_toml(args_path)
 
     if remove_args_path:
-        os.remove(args_path)
-
-    repo_dict = args['repo_dict']
-    task_dict = args['task_dict']
+        try:
+            os.remove(args_path)
+        except IOError:
+            pass
 
     task_path = TaskPath(**args['task_path_dict'])
 
+    # Setup logging.
     logging.basicConfig(level=logging.INFO, filename=task_path.logging)
     logging.getLogger("filelock").setLevel(logging.WARNING)
 
@@ -591,6 +535,9 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
 
     logger_stderr = logging.getLogger('stderr')
     lfl_stderr = LockedFileLikeObject(task_path.logging_lock, logger_stderr.error)
+
+    repo_dict = args['repo_dict']
+    task_dict = args['task_dict']
 
     flock = FileLock(task_path.lock)
     flock.acquire()
