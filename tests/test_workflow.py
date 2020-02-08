@@ -1,7 +1,7 @@
 from dataclasses import asdict
-from github_powered_pypi.pkg_repos import GitHubConfig, PkgRepoType, pkg_repo_type_to_text
-from github_powered_pypi.utils import write_toml
-from github_powered_pypi.workflow import load_pkg_repo_configs
+from private_pypi.pkg_repos import GitHubConfig, PkgRepoType, pkg_repo_type_to_text
+from private_pypi.utils import write_toml
+from private_pypi.workflow import load_pkg_repo_configs
 
 
 def test_load_pkg_repo_configs(tmp_path):

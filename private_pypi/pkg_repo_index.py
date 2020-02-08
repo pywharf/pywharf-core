@@ -2,8 +2,8 @@ from typing import Dict, Iterable, List, Optional, Type
 from dataclasses import asdict
 from itertools import chain
 
-from github_powered_pypi.pkg_repos import PkgRef
-from github_powered_pypi.utils import normalize_distribution_name, write_toml, read_toml
+from private_pypi.pkg_repos import PkgRef
+from private_pypi.utils import normalize_distribution_name, write_toml, read_toml
 
 
 class PkgRepoIndex:

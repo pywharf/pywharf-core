@@ -17,7 +17,7 @@ import requests
 import shortuuid
 import toml
 
-from github_powered_pypi.pkg_repos.pkg_repo import (
+from private_pypi.pkg_repos.pkg_repo import (
         LocalPaths,
         PkgRef,
         PkgRepo,
@@ -27,7 +27,7 @@ from github_powered_pypi.pkg_repos.pkg_repo import (
         UploadPackageStatus,
         record_error_if_raises,
 )
-from github_powered_pypi.utils import (
+from private_pypi.utils import (
         LockedFileLikeObject,
         file_lock_is_busy,
         locked_read_file,

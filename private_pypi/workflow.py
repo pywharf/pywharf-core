@@ -5,7 +5,7 @@ import threading
 from os.path import join, exists
 from datetime import datetime
 
-from github_powered_pypi.pkg_repos import (
+from private_pypi.pkg_repos import (
         create_pkg_repo,
         text_to_pkg_repo_type,
         create_pkg_repo_config,
@@ -15,7 +15,7 @@ from github_powered_pypi.pkg_repos import (
         PkgRepoSecret,
         PkgRepoType,
 )
-from github_powered_pypi.utils import read_toml
+from private_pypi.utils import read_toml
 
 SHST = TypeVar('SHST')
 

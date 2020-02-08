@@ -1,13 +1,13 @@
 from enum import Enum, auto
 from typing import Dict, Type
 
-from github_powered_pypi.pkg_repos.github import (
+from private_pypi.pkg_repos.github import (
         GitHubAuthToken,
         GitHubConfig,
         GitHubPkgRef,
         GitHubPkgRepo,
 )
-from github_powered_pypi.pkg_repos.pkg_repo import (
+from private_pypi.pkg_repos.pkg_repo import (
         LocalPaths,
         PkgRef,
         PkgRepo,
