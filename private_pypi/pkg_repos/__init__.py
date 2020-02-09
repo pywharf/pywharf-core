@@ -1,5 +1,6 @@
 from enum import Enum, auto
-from typing import Dict, Type
+from dataclasses import asdict
+from typing import Dict, Type, Iterable
 
 from private_pypi.pkg_repos.github import (
         GITHUB_TYPE,
@@ -27,6 +28,7 @@ from private_pypi.pkg_repos.index import (
         dump_pkg_repo_index,
         load_pkg_repo_index,
 )
+from private_pypi.utils import read_toml, write_toml
 
 
 class PkgRepoType(Enum):
@@ -86,3 +88,26 @@ def create_pkg_repo(config: PkgRepoConfig, secret: PkgRepoSecret,
                     local_paths: LocalPaths) -> PkgRepo:
     pkg_repo_type = text_to_pkg_repo_type(config.type)
     return PKG_REPO_CLS[pkg_repo_type](config=config, secret=secret, local_paths=local_paths)
+
+
+def dump_pkg_repo_configs(path: str, pkg_repo_configs: Iterable[PkgRepoConfig]) -> None:
+    dump = {}
+    for pkg_repo_config in pkg_repo_configs:
+        struct = asdict(pkg_repo_config)
+        name = struct.pop('name')
+        dump[name] = struct
+
+    write_toml(path, dump)
+
+
+def load_pkg_repo_configs(path: str) -> Dict[str, PkgRepoConfig]:
+    name_to_pkg_repo_config: Dict[str, PkgRepoConfig] = {}
+
+    for name, struct in read_toml(path).items():
+        if not isinstance(struct, dict):
+            raise ValueError(f'Invalid config, name={name}, struct={struct}')
+
+        config = create_pkg_repo_config(name=name, **struct)
+        name_to_pkg_repo_config[name] = config
+
+    return name_to_pkg_repo_config

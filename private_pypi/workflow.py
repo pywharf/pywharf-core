@@ -7,13 +7,12 @@ from datetime import datetime
 
 from private_pypi.pkg_repos import (
         create_pkg_repo,
-        create_pkg_repo_config,
         PkgRepoConfig,
         PkgRepo,
         LocalPaths,
         PkgRepoSecret,
+        load_pkg_repo_configs,
 )
-from private_pypi.utils import read_toml
 
 SHST = TypeVar('SHST')
 
@@ -52,19 +51,6 @@ class WorkflowStat:
     # Local paths.
     local_paths: LocalPaths
     upload_folder: Optional[str]
-
-
-def load_pkg_repo_configs(path: str) -> Dict[str, PkgRepoConfig]:
-    name_to_pkg_repo_config: Dict[str, PkgRepoConfig] = {}
-
-    for name, struct in read_toml(path).items():
-        if not isinstance(struct, dict):
-            raise ValueError(f'Invalid config, name={name}, struct={struct}')
-
-        config = create_pkg_repo_config(name=name, **struct)
-        name_to_pkg_repo_config[name] = config
-
-    return name_to_pkg_repo_config
 
 
 def build_workflow_stat(

@@ -1,8 +1,11 @@
 from dataclasses import asdict
 
-from private_pypi.pkg_repos import GitHubConfig
+from private_pypi.pkg_repos import (
+    GitHubConfig,
+    load_pkg_repo_configs,
+    dump_pkg_repo_configs,
+)
 from private_pypi.utils import write_toml
-from private_pypi.workflow import load_pkg_repo_configs
 
 
 def test_load_pkg_repo_configs(tmp_path):
@@ -11,12 +14,7 @@ def test_load_pkg_repo_configs(tmp_path):
             owner='bar',
             repo='baz',
     )
-
-    gh_config_dict = asdict(gh_config)
-    name = gh_config_dict.pop('name')
-
     dump_path = str(tmp_path / 'config.toml')
-    write_toml(dump_path, {name: gh_config_dict})
-
+    dump_pkg_repo_configs(dump_path, [gh_config])
     name_to_configs = load_pkg_repo_configs(dump_path)
-    assert name_to_configs[name] == gh_config
+    assert name_to_configs[gh_config.name] == gh_config
