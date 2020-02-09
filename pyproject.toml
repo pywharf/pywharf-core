@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "private-pypi"
 version = "0.1.0"
-description = "A private PyPI server powered by GitHub."
+description = "A private PyPI server powered by backend(s) like GitHub."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
 readme = "README.md"
