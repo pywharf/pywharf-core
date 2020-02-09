@@ -10,8 +10,10 @@ from private_pypi.pkg_repos import (
         PkgRepo,
         PkgRepoConfig,
         PkgRepoSecret,
+        PkgRepoIndex,
         create_pkg_repo,
         load_pkg_repo_configs,
+        load_pkg_repo_index,
 )
 
 SHST = TypeVar('SHST')
@@ -46,6 +48,7 @@ class WorkflowStat:
     # Package index paths [(<lock-path>, <toml-path>)...]
     name_to_index_paths: Dict[str, Tuple[str, str]]
     name_to_index_mtime_size: Dict[str, Tuple[datetime, int]]
+    name_to_pkg_repo_index: Dict[str, PkgRepoIndex]
 
     # Locked package repos.
     auth_read_expires: int
@@ -83,15 +86,21 @@ def build_workflow_stat(
 
     name_to_index_paths = {}
     name_to_index_mtime_size = {}
-    for name in name_to_pkg_repo_config:
-        index_lock_path = join(index_folder, f'{name}.index.lock')
+    name_to_pkg_repo_index = {}
+    for pkg_repo_config in name_to_pkg_repo_config.values():
+        index_lock_path = join(index_folder, f'{pkg_repo_config.name}.index.lock')
 
-        index_path = join(index_folder, f'{name}.index')
+        index_path = join(index_folder, f'{pkg_repo_config.name}.index')
         if not exists(index_path):
-            raise FileNotFoundError(f'index file={index_path} for name={name} not exists')
+            raise FileNotFoundError(
+                    f'index file={index_path} for name={pkg_repo_config.name} not exists')
 
-        name_to_index_mtime_size[name] = get_mtime_size(index_path)
-        name_to_index_paths[name] = (index_lock_path, index_path)
+        name_to_index_paths[pkg_repo_config.name] = (index_lock_path, index_path)
+        name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
+        name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
+                index_path,
+                pkg_repo_config.type,
+        )
 
     # Paths for repositories.
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
@@ -100,6 +109,7 @@ def build_workflow_stat(
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_index_paths=name_to_index_paths,
             name_to_index_mtime_size=name_to_index_mtime_size,
+            name_to_pkg_repo_index=name_to_pkg_repo_index,
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
             pkg_repo_global_lock=threading.Lock(),

@@ -1,9 +1,7 @@
-from typing import Dict, Iterable, List, Optional, Type
-from dataclasses import asdict
-from itertools import chain
+from typing import Dict, Iterable, List, Optional
 
 from private_pypi.pkg_repos.pkg_repo import PkgRef
-from private_pypi.utils import normalize_distribution_name, write_toml, read_toml
+from private_pypi.utils import normalize_distribution_name
 
 
 class PkgRepoIndex:
@@ -43,17 +41,3 @@ def build_pkg_repo_index_from_pkg_refs(pkg_refs) -> PkgRepoIndex:
     for pkg_ref in pkg_refs:
         pkg_repo_index.add_pkg_ref(pkg_ref)
     return pkg_repo_index
-
-
-def dump_pkg_repo_index(path: str, pkg_repo_index: PkgRepoIndex):
-    struct = {}
-    for distrib in pkg_repo_index.all_distributions:
-        struct_pkg_refs = [asdict(pkg_ref) for pkg_ref in pkg_repo_index.get_pkg_refs(distrib)]
-        struct[distrib] = struct_pkg_refs
-    write_toml(path, struct)
-
-
-def load_pkg_repo_index(path: str, pkg_ref_cls: Type[PkgRef]) -> PkgRepoIndex:
-    struct = read_toml(path)
-    pkg_refs = [pkg_ref_cls(**kwargs) for kwargs in chain.from_iterable(struct.values())]
-    return build_pkg_repo_index_from_pkg_refs(pkg_refs)

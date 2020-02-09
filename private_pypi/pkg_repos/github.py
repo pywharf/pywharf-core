@@ -455,8 +455,8 @@ class GitHubPkgRepo(PkgRepo):
                 else:
                     # No final state, check the task created time.
                     args = read_toml(task_path.args)
-                    if (datetime.now() -
-                                args['task_dict']['task_created_time']).total_seconds() < 10:
+                    delta = datetime.now() - args['task_dict']['task_created_time']
+                    if delta.total_seconds() < 10:
                         status = UploadPackageStatus.TASK_CREATED
                         message = 'Task was just created and is not runnng.'
 
