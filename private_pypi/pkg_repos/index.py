@@ -38,7 +38,7 @@ class PkgRepoIndex:
         return pkg_ref
 
 
-def build_pkg_repo_index_from_pkg_refs(pkg_refs: List[PkgRef]) -> PkgRepoIndex:
+def build_pkg_repo_index_from_pkg_refs(pkg_refs) -> PkgRepoIndex:
     pkg_repo_index = PkgRepoIndex()
     for pkg_ref in pkg_refs:
         pkg_repo_index.add_pkg_ref(pkg_ref)

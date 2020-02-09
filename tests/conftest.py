@@ -1,4 +1,5 @@
 import os
+import os.path
 from datetime import date, datetime
 import tempfile
 
@@ -11,7 +12,10 @@ from private_pypi.pkg_repos import (
         GitHubAuthToken,
         LocalPaths,
         GitHubPkgRepo,
+        load_pkg_repo_configs,
+        create_pkg_repo,
 )
+from private_pypi.utils import read_toml, write_toml
 
 
 # http://doc.pytest.org/en/latest/example/markers.html
@@ -45,6 +49,8 @@ def pytest_runtest_setup(item):
         marked_backend_github = True
     if 'preset_github_pkg_repo' in item.fixturenames:
         marked_backend_github = True
+    if 'preset_workflow_args' in item.fixturenames:
+        marked_backend_github = True
 
     if marked_backend_github and not item.config.option.run_backend_github:
         pytest.skip("Skip github backend test.")
@@ -64,13 +70,13 @@ def setup_test_github_repo():
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
     description = (
             'Autogen test repo for the project python-best-practices/private-pypi '
-            f'({private_pypi.__doc__} homepage https://github.com/python-best-practices/github-as-pypi), '
+            f'({private_pypi.__doc__} homepage https://github.com/python-best-practices/private-pypi), '
             f'created by user {gh_user.login}. ')
     repo_name = f'private-pypi-test-{timestamp}'
     gh_user.create_repo(
             name=repo_name,
             description=description,
-            homepage='https://github.com/python-best-practices/github-as-pypi',
+            homepage='https://github.com/python-best-practices/private-pypi',
             has_issues=False,
             has_wiki=False,
             has_downloads=False,
@@ -104,11 +110,38 @@ def dirty_github_pkg_repo():
     yield create_github_pkg_repo_for_test('dirty_github_test')
 
 
+def create_github_auth_token():
+    gh_token = os.getenv('TEST_GITHUB_TOKEN')
+    assert gh_token
+    return GitHubAuthToken(raw=gh_token)
+
+
 @pytest.fixture(scope='session')
 def preset_github_pkg_repo():
-    repo = create_github_pkg_repo_for_test('preset_github_test')
-    # TODO: setup.
-    yield repo
+    pkg_repo_configs = load_pkg_repo_configs('tests/fixtures/preset_config.toml')
+    yield create_pkg_repo(
+            config=pkg_repo_configs['preset_github_test'],
+            secret=create_github_auth_token(),
+            local_paths=LocalPaths(
+                    stat=str(tempfile.mkdtemp()),
+                    cache=str(tempfile.mkdtemp()),
+            ),
+    )
+
+
+@pytest.fixture(scope='session')
+def preset_workflow_args():
+    args = {
+            'pkg_repo_config_file': 'tests/fixtures/preset_config.toml',
+            'index_folder': tempfile.mkdtemp(),
+            'stat_folder': tempfile.mkdtemp(),
+            'cache_folder': tempfile.mkdtemp(),
+            'upload_folder': tempfile.mkdtemp(),
+    }
+    preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
+    write_toml(os.path.join(args['index_folder'], 'preset_github_test.index'),
+               preset_github_test_index)
+    yield args
 
 
 def create_random_file(path, size):

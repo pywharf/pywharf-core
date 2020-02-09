@@ -8,5 +8,5 @@ pylint private_pypi
 
 # type check: pyright
 
-python dev/build_console_scripts.py ./pyproject.toml /Users/huntzhan/.pyenv/versions/github-as-pypi/bin
+python dev/build_console_scripts.py ./pyproject.toml /Users/huntzhan/.pyenv/versions/private-pypi/bin
 ```

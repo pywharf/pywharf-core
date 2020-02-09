@@ -1,11 +1,28 @@
 from dataclasses import asdict
+from timeit import default_timer
+import time
 
 from private_pypi.pkg_repos import (
-    GitHubConfig,
-    load_pkg_repo_configs,
-    dump_pkg_repo_configs,
+        GitHubConfig,
+        load_pkg_repo_configs,
+        dump_pkg_repo_configs,
 )
-from private_pypi.utils import write_toml
+from private_pypi.workflow import (
+        build_workflow_stat,
+        should_initialize_pkg_repo,
+        setup_and_authenticate_pkg_repo,
+)
+from tests.conftest import create_github_auth_token
+
+
+class Timer:
+
+    def __enter__(self):
+        self.start = default_timer()
+        return self
+
+    def __exit__(self, *args):
+        self.delta = default_timer() - self.start
 
 
 def test_load_pkg_repo_configs(tmp_path):
@@ -18,3 +35,82 @@ def test_load_pkg_repo_configs(tmp_path):
     dump_pkg_repo_configs(dump_path, [gh_config])
     name_to_configs = load_pkg_repo_configs(dump_path)
     assert name_to_configs[gh_config.name] == gh_config
+
+
+def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
+    args = dict(preset_workflow_args)
+    args['auth_read_expires'] = 1
+    args['auth_write_expires'] = 1
+
+    wstat = build_workflow_stat(**args)
+    secret = create_github_auth_token()
+
+    # Read.
+    with Timer() as t:
+        succeeded, _ = setup_and_authenticate_pkg_repo(
+                wstat,
+                'preset_github_test',
+                secret,
+                True,
+        )
+        assert succeeded
+    auth_read_delta = t.delta
+
+    with Timer() as t:
+        for _ in range(100):
+            succeeded, _ = setup_and_authenticate_pkg_repo(
+                    wstat,
+                    'preset_github_test',
+                    secret,
+                    True,
+            )
+            assert succeeded
+    cached_read_delta = t.delta
+    assert auth_read_delta > 100 * cached_read_delta
+
+    time.sleep(1.0)
+    with Timer() as t:
+        succeeded, _ = setup_and_authenticate_pkg_repo(
+                wstat,
+                'preset_github_test',
+                secret,
+                True,
+        )
+        assert succeeded
+    expired_read_delta = t.delta
+    assert expired_read_delta > 100 * cached_read_delta
+
+    # Write.
+    with Timer() as t:
+        succeeded, _ = setup_and_authenticate_pkg_repo(
+                wstat,
+                'preset_github_test',
+                secret,
+                False,
+        )
+        assert succeeded
+    auth_write_delta = t.delta
+
+    with Timer() as t:
+        for _ in range(100):
+            succeeded, _ = setup_and_authenticate_pkg_repo(
+                    wstat,
+                    'preset_github_test',
+                    secret,
+                    False,
+            )
+            assert succeeded
+    cached_write_delta = t.delta
+    assert auth_write_delta > 100 * cached_write_delta
+
+    time.sleep(1.0)
+    with Timer() as t:
+        succeeded, _ = setup_and_authenticate_pkg_repo(
+                wstat,
+                'preset_github_test',
+                secret,
+                False,
+        )
+        assert succeeded
+    expired_write_delta = t.delta
+    assert expired_write_delta > 100 * cached_write_delta

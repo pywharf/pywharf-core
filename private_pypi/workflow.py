@@ -53,7 +53,9 @@ class WorkflowStat:
     pkg_repo_global_lock: threading.Lock
     name_to_pkg_repo_lock_shstg: DefaultDict[str, SecretHashedStorage[threading.RLock]]
     name_to_pkg_repo_shstg: DefaultDict[str, SecretHashedStorage[PkgRepo]]
-    name_to_pkg_repo_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
+    # Read.
+    name_to_pkg_repo_read_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
+    name_to_pkg_repo_write_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
 
     # Local paths.
     local_paths: LocalPaths
@@ -103,7 +105,8 @@ def build_workflow_stat(
             pkg_repo_global_lock=threading.Lock(),
             name_to_pkg_repo_lock_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
-            name_to_pkg_repo_mtime_shstg=defaultdict(SecretHashedStorage),
+            name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
+            name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
             upload_folder=upload_folder,
     )
@@ -118,7 +121,11 @@ def should_initialize_pkg_repo(
 ) -> bool:
     with pkg_repo_lock:
         pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
-        pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_mtime_shstg[name]
+
+        if check_auth_read:
+            pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_read_mtime_shstg[name]
+        else:
+            pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_write_mtime_shstg[name]
 
         if not pkg_repo_shstg.has_item(pkg_repo_secret):
             # Cannot find the instance.
@@ -130,13 +137,17 @@ def should_initialize_pkg_repo(
             # Error in the last request.
             return True
 
-        assert pkg_repo_mtime_shstg.has_item(pkg_repo_secret)
-        mtime = pkg_repo_mtime_shstg.get_item(pkg_repo_secret)
-        max_gap = wstat.auth_read_expires if check_auth_read else wstat.auth_write_expires
-        if (datetime.now() - mtime).seconds > max_gap:
-            # Time expires.
+        if not pkg_repo_mtime_shstg.has_item(pkg_repo_secret):
+            # Unknow.
             return True
 
+        mtime = pkg_repo_mtime_shstg.get_item(pkg_repo_secret)
+        auth_expires = wstat.auth_read_expires if check_auth_read else wstat.auth_write_expires
+        if (datetime.now() - mtime).total_seconds() >= auth_expires:
+            # Last passed but time expires.
+            return True
+
+        # Last passed and not expired.
         return False
 
 
@@ -161,7 +172,11 @@ def setup_and_authenticate_pkg_repo(
     # Prepare the package repository.
     with pkg_repo_lock:
         pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
-        pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_mtime_shstg[name]
+
+        if check_auth_read:
+            pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_read_mtime_shstg[name]
+        else:
+            pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_write_mtime_shstg[name]
 
         if should_initialize_pkg_repo(
                 wstat,
@@ -189,19 +204,5 @@ def setup_and_authenticate_pkg_repo(
             # Succeeded.
             pkg_repo_shstg.set_item(pkg_repo_secret, pkg_repo)
             pkg_repo_mtime_shstg.set_item(pkg_repo_secret, datetime.now())
-            return True, ''
 
-        else:
-            assert pkg_repo_shstg.has_item(pkg_repo_secret)
-            pkg_repo = pkg_repo_shstg.get_item(pkg_repo_secret)
-
-            auth_passed = pkg_repo.auth_read() if check_auth_read else pkg_repo.auth_write()
-            err_msg = ''
-            if auth_passed:
-                # Succeeded, refresh mtime.
-                pkg_repo_mtime_shstg.set_item(pkg_repo_secret, datetime.now())
-            else:
-                err_msg = f'Auth error (readonly={check_auth_read})'
-                pkg_repo.record_error(err_msg)
-
-            return auth_passed, err_msg
+        return True, ''
