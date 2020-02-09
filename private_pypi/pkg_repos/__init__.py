@@ -20,6 +20,12 @@ from private_pypi.pkg_repos.pkg_repo import (
         DownloadIndexStatus,
         DownloadIndexResult,
 )
+from private_pypi.pkg_repos.index import (
+        PkgRepoIndex,
+        build_pkg_repo_index_from_pkg_refs,
+        dump_pkg_repo_index,
+        load_pkg_repo_index,
+)
 
 
 class PkgRepoType(Enum):

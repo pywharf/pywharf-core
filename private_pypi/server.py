@@ -4,8 +4,7 @@ from typing import List
 from flask import Flask, current_app
 from jinja2 import Template
 
-from private_pypi.pkg_repos import PkgRef
-from private_pypi.pkg_repo_index import PkgRepoIndex
+from private_pypi.pkg_repos import PkgRef, PkgRepoIndex
 from private_pypi.workflow import build_workflow_stat
 
 

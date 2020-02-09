@@ -2,7 +2,7 @@ from typing import Dict, Iterable, List, Optional, Type
 from dataclasses import asdict
 from itertools import chain
 
-from private_pypi.pkg_repos import PkgRef
+from private_pypi.pkg_repos.pkg_repo import PkgRef
 from private_pypi.utils import normalize_distribution_name, write_toml, read_toml
 
 
