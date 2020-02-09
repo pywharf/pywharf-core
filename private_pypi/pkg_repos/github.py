@@ -429,9 +429,10 @@ class GitHubPkgRepo(PkgRepo):
                     message = finalstat['logging_message']
                 else:
                     # No final state.
-                    status = UploadPackageStatus.FAILED
+                    status = UploadPackageStatus.TASK_CREATED
                     message = ('Task is not runnng and there\'s no final result'
-                               f'(filename={filename}, task_id={task_id}) should be incorrect.')
+                               f'(filename={filename}, task_id={task_id}) could be incorrect, '
+                               'or the task has not been scheduled.')
             else:
                 # Corrupted lock.
                 status = UploadPackageStatus.FAILED

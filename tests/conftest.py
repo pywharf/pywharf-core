@@ -41,6 +41,8 @@ def pytest_runtest_setup(item):
         marked_backend_github = True
     if 'empty_github_pkg_repo' in item.fixturenames:
         marked_backend_github = True
+    if 'dirty_github_pkg_repo' in item.fixturenames:
+        marked_backend_github = True
     if 'preset_github_pkg_repo' in item.fixturenames:
         marked_backend_github = True
 
@@ -80,30 +82,36 @@ def setup_test_github_repo():
     return gh_user.login, repo_name, gh_token
 
 
-@pytest.fixture(scope='function')
-def empty_github_pkg_repo():
+def create_github_pkg_repo_for_test(name):
     owner, repo, token = setup_test_github_repo()
-    _pkg_repo = GitHubPkgRepo(
-            config=GitHubConfig(name='empty_github_test', owner=owner, repo=repo),
+    return GitHubPkgRepo(
+            config=GitHubConfig(name=name, owner=owner, repo=repo, large_package_bytes=512),
             secret=GitHubAuthToken(raw=token),
             local_paths=LocalPaths(
                     stat=str(tempfile.mkdtemp()),
                     cache=str(tempfile.mkdtemp()),
             ),
     )
-    yield _pkg_repo
+
+
+@pytest.fixture(scope='function')
+def empty_github_pkg_repo():
+    yield create_github_pkg_repo_for_test('empty_github_test')
+
+
+@pytest.fixture(scope='session')
+def dirty_github_pkg_repo():
+    yield create_github_pkg_repo_for_test('dirty_github_test')
 
 
 @pytest.fixture(scope='session')
 def preset_github_pkg_repo():
-    owner, repo, token = setup_test_github_repo()
-    _pkg_repo = GitHubPkgRepo(
-            config=GitHubConfig(name='preset_github_test', owner=owner, repo=repo),
-            secret=GitHubAuthToken(raw=token),
-            local_paths=LocalPaths(
-                    stat=str(tempfile.mkdtemp()),
-                    cache=str(tempfile.mkdtemp()),
-            ),
-    )
+    repo = create_github_pkg_repo_for_test('preset_github_test')
     # TODO: setup.
-    yield _pkg_repo
+    yield repo
+
+
+def create_random_file(path, size):
+    with open(path, 'wb') as fout:
+        fout.write(os.urandom(size))
+    return path
