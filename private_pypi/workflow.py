@@ -1,16 +1,16 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, DefaultDict, Optional, Tuple, TypeVar, Generic
-import threading
-from os.path import join, exists
 from datetime import datetime
+from os.path import exists, getmtime, getsize, join
+import threading
+from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar
 
 from private_pypi.pkg_repos import (
-        create_pkg_repo,
-        PkgRepoConfig,
-        PkgRepo,
         LocalPaths,
+        PkgRepo,
+        PkgRepoConfig,
         PkgRepoSecret,
+        create_pkg_repo,
         load_pkg_repo_configs,
 )
 
@@ -32,6 +32,12 @@ class SecretHashedStorage(Generic[SHST]):
         return self._hash_to_item[secret.secret_hash()]
 
 
+def get_mtime_size(path: str) -> Tuple[datetime, int]:
+    mtime = datetime.fromtimestamp(getmtime(path))
+    size = getsize(path)
+    return mtime, size
+
+
 @dataclass
 class WorkflowStat:
     # Package repository configs.
@@ -39,6 +45,7 @@ class WorkflowStat:
 
     # Package index paths [(<lock-path>, <toml-path>)...]
     name_to_index_paths: Dict[str, Tuple[str, str]]
+    name_to_index_mtime_size: Dict[str, Tuple[datetime, int]]
 
     # Locked package repos.
     auth_read_expires: int
@@ -54,32 +61,43 @@ class WorkflowStat:
 
 
 def build_workflow_stat(
-        pkg_repo_config: str,
+        pkg_repo_config_file: str,
         index_folder: str,
         stat_folder: Optional[str],
-        upload_folder: Optional[str],
         cache_folder: Optional[str],
+        upload_folder: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
-    if not exists(pkg_repo_config):
-        raise ValueError(f'pkg_repo_config={pkg_repo_config} not exists.')
-    if not exists(index_folder):
-        raise ValueError(f'index_folder={index_folder} not exists.')
+    # Config.
+    if not exists(pkg_repo_config_file):
+        raise FileNotFoundError(f'pkg_repo_config_file={pkg_repo_config_file} not exists.')
 
-    name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config)
+    name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config_file)
+
+    # Index.
+    if not exists(index_folder):
+        raise FileNotFoundError(f'index_folder={index_folder} not exists.')
 
     name_to_index_paths = {}
+    name_to_index_mtime_size = {}
     for name in name_to_pkg_repo_config:
         index_lock_path = join(index_folder, f'{name}.index.lock')
+
         index_path = join(index_folder, f'{name}.index')
+        if not exists(index_path):
+            raise FileNotFoundError(f'index file={index_path} for name={name} not exists')
+
+        name_to_index_mtime_size[name] = get_mtime_size(index_path)
         name_to_index_paths[name] = (index_lock_path, index_path)
 
+    # Paths for repositories.
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
     return WorkflowStat(
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_index_paths=name_to_index_paths,
+            name_to_index_mtime_size=name_to_index_mtime_size,
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
             pkg_repo_global_lock=threading.Lock(),

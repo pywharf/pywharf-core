@@ -60,7 +60,7 @@ app = Flask(__name__)  # pylint: disable=invalid-name
 
 
 def run_server(
-        pkg_repo_config,
+        config,
         index,
         stat=None,
         upload=None,
@@ -76,11 +76,11 @@ def run_server(
     with app.app_context():
         # Init.
         current_app.workflow_stat = build_workflow_stat(
-                pkg_repo_config=pkg_repo_config,
+                pkg_repo_config_file=config,
                 index_folder=index,
                 stat_folder=stat,
-                upload_folder=upload,
                 cache_folder=cache,
+                upload_folder=upload,
                 auth_read_expires=auth_read_expires,
                 auth_write_expires=auth_write_expires,
         )
