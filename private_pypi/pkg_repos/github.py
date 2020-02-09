@@ -1,5 +1,6 @@
 import contextlib
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from enum import Enum, auto
 import hashlib
 import logging
@@ -354,6 +355,7 @@ class GitHubPkgRepo(PkgRepo):
                     'meta': meta,
                     'path': path,
                     'task_id': task_id,
+                    'task_created_time': datetime.now(),
             }
 
             write_toml(
@@ -427,12 +429,24 @@ class GitHubPkgRepo(PkgRepo):
                     status = UploadPackageStatus.SUCCEEDED \
                             if not finalstat['failed'] else UploadPackageStatus.FAILED
                     message = finalstat['logging_message']
+
+                elif not os.path.exists(task_path.args):
+                    # No final state and no args file.
+                    status = UploadPackageStatus.FAILED
+                    message = 'Args file not found. Please help report this bug.'
+
                 else:
-                    # No final state.
-                    status = UploadPackageStatus.TASK_CREATED
-                    message = ('Task is not runnng and there\'s no final result'
-                               f'(filename={filename}, task_id={task_id}) could be incorrect, '
-                               'or the task has not been scheduled.')
+                    # No final state, check the task created time.
+                    args = read_toml(task_path.args)
+                    if (datetime.now() - args['task_dict']['task_created_time']).seconds < 10:
+                        status = UploadPackageStatus.TASK_CREATED
+                        message = 'Task was just created and is not runnng.'
+
+                    else:
+                        status = UploadPackageStatus.FAILED
+                        message = ('Task is not runnng'
+                                   f'incorrect (filename={filename}, task_id={task_id}).')
+
             else:
                 # Corrupted lock.
                 status = UploadPackageStatus.FAILED
