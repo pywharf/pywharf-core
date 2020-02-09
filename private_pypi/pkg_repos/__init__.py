@@ -15,6 +15,10 @@ from private_pypi.pkg_repos.pkg_repo import (
         PkgRepoSecret,
         UploadPackageResult,
         UploadPackageStatus,
+        UploadIndexStatus,
+        UploadIndexResult,
+        DownloadIndexStatus,
+        DownloadIndexResult,
 )
 
 

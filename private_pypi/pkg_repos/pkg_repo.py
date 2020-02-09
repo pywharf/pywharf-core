@@ -48,6 +48,28 @@ class DownloadPackageResult:
     pass  # TODO
 
 
+class UploadIndexStatus(Enum):
+    SUCCEEDED = auto()
+    FAILED = auto()
+
+
+@dataclass
+class UploadIndexResult:
+    status: UploadIndexStatus
+    message: str = ''
+
+
+class DownloadIndexStatus(Enum):
+    SUCCEEDED = auto()
+    FAILED = auto()
+
+
+@dataclass
+class DownloadIndexResult:
+    status: DownloadIndexStatus
+    message: str = ''
+
+
 @dataclass
 class PkgRef:
     distrib: str
@@ -108,11 +130,11 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def upload_index(self, path: str):
+    def upload_index(self, path: str) -> UploadIndexResult:
         pass
 
     @abstractmethod
-    def download_index(self, output: str):
+    def download_index(self, output: str) -> DownloadIndexResult:
         pass
 
 

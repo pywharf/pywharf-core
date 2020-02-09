@@ -24,8 +24,12 @@ from private_pypi.pkg_repos.pkg_repo import (
         PkgRepo,
         PkgRepoConfig,
         PkgRepoSecret,
-        UploadPackageResult,
         UploadPackageStatus,
+        UploadPackageResult,
+        UploadIndexStatus,
+        UploadIndexResult,
+        DownloadIndexStatus,
+        DownloadIndexResult,
         record_error_if_raises,
 )
 from private_pypi.utils import (
@@ -44,6 +48,8 @@ from private_pypi.utils import (
 class GitHubConfig(PkgRepoConfig):
     owner: str
     repo: str
+    branch: str = 'master'
+    index_filename: str = 'index.toml'
     large_package_bytes: int = 1024**2
 
 
@@ -539,13 +545,61 @@ class GitHubPkgRepo(PkgRepo):
 
         return pkg_refs
 
-    @record_error_if_raises
-    def upload_index(self, path: str):
-        raise NotImplementedError()
+    def upload_index(self, path: str) -> UploadIndexResult:
+        try:
+            # Check if the index exists in the remote.
+            root_tree = self._gh_repo.get_git_tree(self.config.branch, recursive=False)
+            index_sha = None
+            for tree_element in root_tree.tree:
+                if tree_element.path == self.config.index_filename:
+                    index_sha = tree_element.sha
+                    break
+
+            with open(path, 'rb') as fin:
+                content = fin.read()
+
+            if index_sha is None:
+                # Index file not exists, create file.
+                self._gh_repo.create_file(
+                        path=self.config.index_filename,
+                        message='Index file created.',
+                        branch=self.config.branch,
+                        content=content,
+                )
+
+            else:
+                # Index file exists, update file.
+                self._gh_repo.update_file(
+                        path=self.config.index_filename,
+                        message='Index file updated.',
+                        branch=self.config.branch,
+                        sha=index_sha,
+                        content=content,
+                )
+
+            return UploadIndexResult(status=UploadIndexStatus.SUCCEEDED)
+
+        except:  # pylint: disable=bare-except
+            error_message = traceback.format_exc()
+            self.record_error(error_message)
+            return UploadIndexResult(status=UploadIndexStatus.FAILED, message=error_message)
 
     @record_error_if_raises
-    def download_index(self, output: str):
-        raise NotImplementedError()
+    def download_index(self, output: str) -> DownloadIndexResult:
+        try:
+            content_file = self._gh_repo.get_contents(
+                    self.config.index_filename,
+                    ref=self.config.branch,
+            )
+            with open(output, 'wb') as fout:
+                fout.write(content_file.decoded_content)
+
+            return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
+
+        except:  # pylint: disable=bare-except
+            error_message = traceback.format_exc()
+            self.record_error(error_message)
+            return DownloadIndexResult(status=DownloadIndexStatus.FAILED, message=error_message)
 
 
 def github_upload_package(args_path: str, remove_args_path: bool = False):
