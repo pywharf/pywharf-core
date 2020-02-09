@@ -2,6 +2,7 @@ from enum import Enum, auto
 from typing import Dict, Type
 
 from private_pypi.pkg_repos.github import (
+        GITHUB_TYPE,
         GitHubAuthToken,
         GitHubConfig,
         GitHubPkgRef,
@@ -32,12 +33,18 @@ class PkgRepoType(Enum):
     GITHUB = auto()
 
 
-def text_to_pkg_repo_type(name: str) -> PkgRepoType:
-    return getattr(PkgRepoType, name.upper())
+TEXT_TO_PKG_REPO_TYPE: Dict[str, PkgRepoType] = {
+        GITHUB_TYPE: PkgRepoType.GITHUB,
+}
+PKG_REPO_TYPE_TO_TEXT = {val: key for key, val in TEXT_TO_PKG_REPO_TYPE.items()}
+
+
+def text_to_pkg_repo_type(text: str) -> PkgRepoType:
+    return TEXT_TO_PKG_REPO_TYPE[text.lower()]
 
 
 def pkg_repo_type_to_text(pkg_repo_type: PkgRepoType) -> str:
-    return pkg_repo_type.name.lower()
+    return PKG_REPO_TYPE_TO_TEXT[pkg_repo_type]
 
 
 PKG_REPO_CONFIG_CLS: Dict[PkgRepoType, Type[PkgRepoConfig]] = {
@@ -45,8 +52,9 @@ PKG_REPO_CONFIG_CLS: Dict[PkgRepoType, Type[PkgRepoConfig]] = {
 }
 
 
-def create_pkg_repo_config(pkg_repo_type: PkgRepoType, *args, **kwargs) -> PkgRepoConfig:
-    return PKG_REPO_CONFIG_CLS[pkg_repo_type](*args, **kwargs)
+def create_pkg_repo_config(**kwargs) -> PkgRepoConfig:
+    pkg_repo_type = text_to_pkg_repo_type(kwargs['type'])
+    return PKG_REPO_CONFIG_CLS[pkg_repo_type](**kwargs)
 
 
 PKG_REPO_SECRET_CLS: Dict[PkgRepoType, Type[PkgRepoSecret]] = {
@@ -54,17 +62,9 @@ PKG_REPO_SECRET_CLS: Dict[PkgRepoType, Type[PkgRepoSecret]] = {
 }
 
 
-def create_pkg_repo_secret(pkg_repo_type: PkgRepoType, *args, **kwargs) -> PkgRepoSecret:
-    return PKG_REPO_SECRET_CLS[pkg_repo_type](*args, **kwargs)
-
-
-PKG_REPO_CLS: Dict[PkgRepoType, Type[PkgRepo]] = {
-        PkgRepoType.GITHUB: GitHubPkgRepo,
-}
-
-
-def create_pkg_repo(pkg_repo_type, config, secret, local_paths) -> PkgRepo:
-    return PKG_REPO_CLS[pkg_repo_type](config=config, secret=secret, local_paths=local_paths)
+def create_pkg_repo_secret(**kwargs) -> PkgRepoSecret:
+    pkg_repo_type = text_to_pkg_repo_type(kwargs['type'])
+    return PKG_REPO_SECRET_CLS[pkg_repo_type](**kwargs)
 
 
 PKG_REF_CLS: Dict[PkgRepoType, Type[PkgRef]] = {
@@ -72,5 +72,17 @@ PKG_REF_CLS: Dict[PkgRepoType, Type[PkgRef]] = {
 }
 
 
-def create_pkg_ref(pkg_repo_type: PkgRepoType, *args, **kwargs) -> PkgRef:
-    return PKG_REF_CLS[pkg_repo_type](*args, **kwargs)
+def create_pkg_ref(**kwargs) -> PkgRef:
+    pkg_repo_type = text_to_pkg_repo_type(kwargs['type'])
+    return PKG_REF_CLS[pkg_repo_type](**kwargs)
+
+
+PKG_REPO_CLS: Dict[PkgRepoType, Type[PkgRepo]] = {
+        PkgRepoType.GITHUB: GitHubPkgRepo,
+}
+
+
+def create_pkg_repo(config: PkgRepoConfig, secret: PkgRepoSecret,
+                    local_paths: LocalPaths) -> PkgRepo:
+    pkg_repo_type = text_to_pkg_repo_type(config.type)
+    return PKG_REPO_CLS[pkg_repo_type](config=config, secret=secret, local_paths=local_paths)

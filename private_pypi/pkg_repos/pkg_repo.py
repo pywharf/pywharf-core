@@ -9,14 +9,30 @@ from typing import Dict, List, Optional, Tuple, TypeVar
 @dataclass
 class PkgRepoConfig:
     name: str
+    type: str = ''
 
 
 @dataclass
 class PkgRepoSecret:
     raw: str
+    type: str = ''
 
     @abstractmethod
     def secret_hash(self) -> str:
+        pass
+
+
+@dataclass
+class PkgRef:
+    distrib: str
+    package: str
+    ext: str
+    sha256: str
+    meta: Dict[str, str]
+    type: str = ''
+
+    @abstractmethod
+    def auth_url(self, config: PkgRepoConfig, secret: PkgRepoSecret) -> str:
         pass
 
 
@@ -68,19 +84,6 @@ class DownloadIndexStatus(Enum):
 class DownloadIndexResult:
     status: DownloadIndexStatus
     message: str = ''
-
-
-@dataclass
-class PkgRef:
-    distrib: str
-    package: str
-    ext: str
-    sha256: str
-    meta: Dict[str, str]
-
-    @abstractmethod
-    def auth_url(self, config: PkgRepoConfig, secret: PkgRepoSecret) -> str:
-        pass
 
 
 @dataclass

@@ -43,14 +43,20 @@ from private_pypi.utils import (
         write_toml,
 )
 
+GITHUB_TYPE = 'github'
+
 
 @dataclass
 class GitHubConfig(PkgRepoConfig):
-    owner: str
-    repo: str
+    owner: str = ''
+    repo: str = ''
     branch: str = 'master'
     index_filename: str = 'index.toml'
     large_package_bytes: int = 1024**2
+
+    def __post_init__(self):
+        assert self.owner and self.repo
+        self.type = GITHUB_TYPE
 
 
 @dataclass
@@ -59,11 +65,51 @@ class GitHubAuthToken(PkgRepoSecret):
 
     def __post_init__(self):
         self.token = self.raw
+        self.type = GITHUB_TYPE
 
     def secret_hash(self) -> str:
         sha256_algo = hashlib.sha256()
         sha256_algo.update(self.token.encode())
         return f'github-{sha256_algo.hexdigest()}'
+
+
+@dataclass
+class GitHubPkgRef(PkgRef):
+    url: str = ''
+
+    def __post_init__(self):
+        assert self.url
+        self.type = GITHUB_TYPE
+
+    def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
+        headers = {
+                'Accept': 'application/octet-stream',
+                'Authorization': f'token {secret.token}',
+        }
+        retry = 3
+        response = None
+        while retry > 0:
+            try:
+                response = requests.get(
+                        self.url,
+                        headers=headers,
+                        allow_redirects=False,
+                        timeout=1.0,
+                )
+                break
+            except requests.Timeout:
+                retry -= 1
+                response = None
+                continue
+
+        assert retry > 0
+        response.raise_for_status()
+        assert response.status_code == 302
+
+        parsed = urlparse(response.next.url)
+        assert not parsed.fragment
+
+        return parsed._replace(fragment=f'sha256={self.sha256}').geturl()
 
 
 class TaskType(Enum):
@@ -138,41 +184,6 @@ class UploadAndDownloadPackageContext:
     release: github.GitRelease.GitRelease = None
     failed: bool = False
     message: str = ''
-
-
-@dataclass
-class GitHubPkgRef(PkgRef):
-    url: str
-
-    def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
-        headers = {
-                'Accept': 'application/octet-stream',
-                'Authorization': f'token {secret.token}',
-        }
-        retry = 3
-        response = None
-        while retry > 0:
-            try:
-                response = requests.get(
-                        self.url,
-                        headers=headers,
-                        allow_redirects=False,
-                        timeout=1.0,
-                )
-                break
-            except requests.Timeout:
-                retry -= 1
-                response = None
-                continue
-
-        assert retry > 0
-        response.raise_for_status()
-        assert response.status_code == 302
-
-        parsed = urlparse(response.next.url)
-        assert not parsed.fragment
-
-        return parsed._replace(fragment=f'sha256={self.sha256}').geturl()
 
 
 LOCK_TIMEOUT = 0.5

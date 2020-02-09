@@ -7,13 +7,11 @@ from datetime import datetime
 
 from private_pypi.pkg_repos import (
         create_pkg_repo,
-        text_to_pkg_repo_type,
         create_pkg_repo_config,
         PkgRepoConfig,
         PkgRepo,
         LocalPaths,
         PkgRepoSecret,
-        PkgRepoType,
 )
 from private_pypi.utils import read_toml
 
@@ -38,7 +36,6 @@ class SecretHashedStorage(Generic[SHST]):
 @dataclass
 class WorkflowStat:
     # Package repository configs.
-    name_to_pkg_repo_type: Dict[str, PkgRepoType]
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
 
     # Package index paths [(<lock-path>, <toml-path>)...]
@@ -57,28 +54,17 @@ class WorkflowStat:
     upload_folder: Optional[str]
 
 
-def load_pkg_repo_configs(
-        pkg_repo_config: str) -> Tuple[Dict[str, PkgRepoType], Dict[str, PkgRepoConfig]]:
-    name_to_pkg_repo_type: Dict[str, PkgRepoType] = {}
+def load_pkg_repo_configs(path: str) -> Dict[str, PkgRepoConfig]:
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig] = {}
 
-    for name, struct in read_toml(pkg_repo_config).items():
-        if not isinstance(struct, dict) or 'type' not in struct:
+    for name, struct in read_toml(path).items():
+        if not isinstance(struct, dict):
             raise ValueError(f'Invalid config, name={name}, struct={struct}')
 
-        type_ = struct.pop('type')
-        pkg_repo_type = text_to_pkg_repo_type(type_)
-        if not pkg_repo_type:
-            raise TypeError(f'Invalid type, name={name}, type={type_}, struct={struct}')
+        config = create_pkg_repo_config(name=name, **struct)
+        name_to_pkg_repo_config[name] = config
 
-        name_to_pkg_repo_config[name] = create_pkg_repo_config(
-                pkg_repo_type,
-                name=name,
-                **struct,
-        )
-        name_to_pkg_repo_type[name] = pkg_repo_type
-
-    return name_to_pkg_repo_type, name_to_pkg_repo_config
+    return name_to_pkg_repo_config
 
 
 def build_workflow_stat(
@@ -95,7 +81,7 @@ def build_workflow_stat(
     if not exists(index_folder):
         raise ValueError(f'index_folder={index_folder} not exists.')
 
-    name_to_pkg_repo_type, name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config)
+    name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config)
 
     name_to_index_paths = {}
     for name in name_to_pkg_repo_config:
@@ -106,7 +92,6 @@ def build_workflow_stat(
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
     return WorkflowStat(
-            name_to_pkg_repo_type=name_to_pkg_repo_type,
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_index_paths=name_to_index_paths,
             auth_read_expires=auth_read_expires,
@@ -160,7 +145,6 @@ def setup_and_authenticate_pkg_repo(
     """name has been validated.
     """
     pkg_repo_config = wstat.name_to_pkg_repo_config[name]
-    pkg_repo_type = wstat.name_to_pkg_repo_type[name]
 
     # Get package repository lock.
     with wstat.pkg_repo_global_lock:
@@ -184,7 +168,6 @@ def setup_and_authenticate_pkg_repo(
         ):
             # Initialize.
             pkg_repo = create_pkg_repo(
-                    pkg_repo_type=pkg_repo_type,
                     config=pkg_repo_config,
                     secret=pkg_repo_secret,
                     local_paths=wstat.local_paths,
