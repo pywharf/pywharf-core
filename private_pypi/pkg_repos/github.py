@@ -57,6 +57,8 @@ class GitHubConfig(PkgRepoConfig):
     def __post_init__(self):
         assert self.owner and self.repo
         self.type = GITHUB_TYPE
+        # https://help.github.com/en/github/managing-large-files/distributing-large-binaries
+        self.max_file_bytes = 2 * 1024**3 - 1
 
 
 @dataclass

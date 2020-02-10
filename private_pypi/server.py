@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import os.path
+from os.path import isdir, splitext, join
+import uuid
 
 from flask import Flask, current_app, request, session, redirect
 from flask_login import LoginManager, UserMixin, login_required, current_user
@@ -13,6 +14,7 @@ from private_pypi.workflow import (
         workflow_api_simple,
         workflow_api_simple_distrib,
         workflow_api_redirect_package_download_url,
+        workflow_api_upload_package,
 )
 from private_pypi.web_ui import LOGIN_HTML
 
@@ -135,7 +137,7 @@ def api_simple_distrib(distrib):
 @app.route('/simple/<distrib>/<filename>', methods=['GET'])
 @login_required
 def api_redirect_package_download_url(distrib, filename):
-    package, ext = os.path.splitext(filename)
+    package, ext = splitext(filename)
     ext = ext.lstrip('.')
     if not ext:
         return 'Empty extension.', 404
@@ -160,27 +162,103 @@ def api_redirect_package_download_url(distrib, filename):
     return redirect(auth_url)
 
 
+# https://warehouse.pypa.io/api-reference/legacy/#upload-api
 @app.route('/simple/', methods=['POST'])
 @login_required
-def api_upload_package():
-    pass
+def api_upload_package():  # pylint: disable=too-many-return-statements
+    cache_folder = current_app.workflow_stat.local_paths.cache
+    if not cache_folder:
+        return 'Cache folder --cache not set.', 405
+    if not isdir(cache_folder):
+        return f'Cache folder --cache={cache_folder} path invalid.', 405
+
+    stat_folder = current_app.workflow_stat.local_paths.stat
+    if not stat_folder:
+        return 'State folder --stat not set.', 405
+    if not isdir(stat_folder):
+        return f'State folder --stat={stat_folder} path invalid.', 405
+
+    pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
+    if pkg_repo_secret is None:
+        return err_msg, 401
+
+    name = load_name_from_request()
+
+    if 'multipart/form-data' not in request.content_type:
+        return 'Please post content-type=multipart/form-data.', 405
+    if 'content' not in request.files:
+        return 'File not found.', 405
+
+    # Save to the cache folder.
+    content_file = request.files['content']
+    cache_path = join(cache_folder, f'upload-{str(uuid.uuid1())}')
+    content_file.save(cache_path)
+
+    # Build meta.
+    meta = {str(key): str(val) for key, val in request.form.items()}
+
+    # Upload file.
+    body, status_code = workflow_api_upload_package(
+            current_app.workflow_stat,
+            name,
+            pkg_repo_secret,
+            content_file.filename,
+            meta,
+            cache_path,
+    )
+    return body, status_code
 
 
 def run_server(
-        config,
-        index,
-        config_secret=None,
-        stat=None,
-        upload=None,
-        cache=None,
-        host='localhost',
-        port=8080,
-        auth_read_expires=3600,
-        auth_write_expires=300,
-        cert=None,
-        pkey=None,
+        config: str,
+        index: str,
+        config_secret: Optional[str] = None,
+        stat: Optional[str] = None,
+        cache: Optional[str] = None,
+        host: str = 'localhost',
+        port: int = 8888,
+        auth_read_expires: int = 3600,
+        auth_write_expires: int = 300,
+        cert: Optional[str] = None,
+        pkey: Optional[str] = None,
 ):
+    """Run the private-pypi server.
 
+    Args:
+        config (str): \
+Path to the package repositories config.
+        index (str): \
+Path to the index folder. \
+The folder could be empty if --config_secret is provided.
+        config_secret (Optional[str], optional): \
+Path to the admin secrets config with read/write permission. \
+This field is required for index synchronization on-the-fly. \
+Defaults to None.
+        stat (Optional[str], optional): \
+Path to the state folder. \
+This field is required for the upload API. \
+Defaults to None.
+        cache (Optional[str], optional): \
+Path to the cache folder for the file upload and download. \
+This field is required for the upload API and local cache feature. \
+Defaults to None.
+        host (str, optional): \
+The interface to bind to. Defaults to 'localhost'.
+        port (int, optional): \
+The port to bind to. Defaults to 8080.
+        auth_read_expires (int, optional): \
+The expiration time in seconds for read authentication. \
+Defaults to 3600.
+        auth_write_expires (int, optional): \
+The expiration time in seconds for read authentication. \
+Defaults to 300.
+        cert (Optional[str], optional): \
+Specify a certificate file to use HTTPS. \
+Defaults to None.
+        pkey (Optional[str], optional): \
+The key file to use when specifying a certificate. \
+Defaults to None.
+    """
     with app.app_context():
         # Init.
         current_app.workflow_stat = build_workflow_stat(
@@ -188,7 +266,6 @@ def run_server(
                 index_folder=index,
                 stat_folder=stat,
                 cache_folder=cache,
-                upload_folder=upload,
                 auth_read_expires=auth_read_expires,
                 auth_write_expires=auth_write_expires,
         )

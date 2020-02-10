@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from os.path import exists, getmtime, getsize, join
+from os.path import exists, isdir, getmtime, getsize, join
 import threading
 from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar, List
 import traceback
@@ -16,6 +16,7 @@ from private_pypi.pkg_repos import (
         PkgRepoSecret,
         PkgRef,
         PkgRepoIndex,
+        UploadPackageStatus,
         create_pkg_repo,
         load_pkg_repo_configs,
         load_pkg_repo_index,
@@ -67,7 +68,6 @@ class WorkflowStat:
 
     # Local paths.
     local_paths: LocalPaths
-    upload_folder: Optional[str]
 
 
 def build_workflow_stat(
@@ -75,7 +75,6 @@ def build_workflow_stat(
         index_folder: str,
         stat_folder: Optional[str],
         cache_folder: Optional[str],
-        upload_folder: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
@@ -86,8 +85,8 @@ def build_workflow_stat(
     name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config_file)
 
     # Index.
-    if not exists(index_folder):
-        raise FileNotFoundError(f'index_folder={index_folder} not exists.')
+    if not isdir(index_folder):
+        raise FileNotFoundError(f'--index={index_folder} path invalid.')
 
     name_to_index_paths = {}
     name_to_index_mtime_size = {}
@@ -123,7 +122,6 @@ def build_workflow_stat(
             name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
-            upload_folder=upload_folder,
     )
 
 
@@ -171,7 +169,7 @@ def pkg_repo_secret_is_authenticated(
         name: str,
         pkg_repo_secret: PkgRepoSecret,
         check_auth_read: bool,
-) -> Tuple[bool, str]:
+) -> Tuple[Optional[PkgRepo], str]:
     """name has been validated.
     """
     pkg_repo_config = wstat.name_to_pkg_repo_config[name]
@@ -216,13 +214,13 @@ def pkg_repo_secret_is_authenticated(
             else:
                 err_msg = f'Auth setup error (readonly={check_auth_read})\n' + err_msg
             if not ready:
-                return False, err_msg
+                return None, err_msg
 
             # Succeeded.
             pkg_repo_shstg.set_item(pkg_repo_secret, pkg_repo)
             pkg_repo_mtime_shstg.set_item(pkg_repo_secret, datetime.now())
 
-        return True, ''
+        return pkg_repo_shstg.get_item(pkg_repo_secret), ''
 
 
 def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
@@ -312,14 +310,15 @@ def workflow_get_pkg_repo_index(
         wstat: WorkflowStat,
         name: str,
         pkg_repo_secret: PkgRepoSecret,
+        check_auth_read: bool = True,
 ) -> Tuple[Optional[PkgRepoIndex], str, int]:
-    passed_auth, err_msg = pkg_repo_secret_is_authenticated(
+    pkg_repo, err_msg = pkg_repo_secret_is_authenticated(
             wstat,
             name,
             pkg_repo_secret,
-            check_auth_read=True,
+            check_auth_read=check_auth_read,
     )
-    if not passed_auth:
+    if pkg_repo is None:
         return None, err_msg, 401
 
     passed_index, err_msg = keep_pkg_repo_index_up_to_date(wstat, name)
@@ -397,3 +396,33 @@ def workflow_api_redirect_package_download_url(
 
     except:  # pylint: disable=bare-except
         return None, 'Failed to get resource.\n' + traceback.format_exc(), 401
+
+
+def workflow_api_upload_package(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+        filename: str,
+        meta: Dict[str, str],
+        path: str,
+) -> Tuple[str, int]:
+    pkg_repo, err_msg = pkg_repo_secret_is_authenticated(
+            wstat,
+            name,
+            pkg_repo_secret,
+            check_auth_read=False,
+    )
+    if pkg_repo is None:
+        return err_msg, 401
+
+    result = pkg_repo.upload_package(filename, meta, path)
+    if result.status == UploadPackageStatus.FAILED:
+        status_code = 401
+    elif result.status == UploadPackageStatus.TASK_CREATED:
+        status_code = 201
+    elif result.status == UploadPackageStatus.SUCCEEDED:
+        status_code = 200
+    else:
+        raise ValueError('Invalid UploadPackageStatus')
+
+    return result.message, status_code

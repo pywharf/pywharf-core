@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, TypeVar
 class PkgRepoConfig:
     name: str
     type: str = ''
+    max_file_bytes: int = 1024**3
 
 
 @dataclass
