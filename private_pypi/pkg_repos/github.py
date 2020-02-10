@@ -384,8 +384,8 @@ class GitHubPkgRepo(PkgRepo):
                     },
             )
             subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-                    ['github_upload_package', task_path.args, '--remove_args_path'],
-                    # Share env for resolving `github_upload_package`.
+                    ['private_pypi_github_upload_package', task_path.args, '--remove_args_path'],
+                    # Share env for resolving `private_pypi_github_upload_package`.
                     env=dict(os.environ),
                     # Add to the current process group.
                     preexec_fn=os.setpgrp,

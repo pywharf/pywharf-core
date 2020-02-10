@@ -1,72 +1,144 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Optional, Tuple
 
-from flask import Flask, current_app
-from jinja2 import Template
+from flask import Flask, current_app, request, session, redirect
+from flask_login import LoginManager, UserMixin, login_required, current_user
+import fire
 
-from private_pypi.pkg_repos import PkgRef, PkgRepoIndex
-from private_pypi.workflow import build_workflow_stat
+from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
+from private_pypi.workflow import (
+        WorkflowStat,
+        build_workflow_stat,
+        workflow_api_simple,
+)
+from private_pypi.web_page import LOGIN_HTML
+
+app = Flask(__name__)  # pylint: disable=invalid-name
+app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'
+
+login_manager = LoginManager()  # pylint: disable=invalid-name
+login_manager.init_app(app)
+login_manager.login_view = 'browser_login'
 
 
 @dataclass
-class LinkItem:
-    href: str
-    text: str
+class MockUser(UserMixin):
+    pkg_repo_name: str
+    pkg_repo_secret_raw: str
 
 
-# PEP 503 -- Simple Repository API
-# https://www.python.org/dev/peps/pep-0503/
-PAGE_TEMPLATE = Template('''<!DOCTYPE html>
-<html>
-<head><title>{{ title }}</title></head>
-<body>
-<h1>{{ title }}</h1>
-
-{% for link_item in link_items %}
-    <a href="{{ link_item.href }}">{{ link_item.text }}</a>
-{% endfor %}
-
-</body>
-</html>
-''')
+SESSION_KEY_PKG_REPO_NAME = '_private_pypi_pkg_repo_name'
+SESSION_KEY_PKG_REPO_SECRET_RAW = '_private_pypi_pkg_repo_secret_raw'
 
 
-def build_root_page(pkg_repo_index: PkgRepoIndex) -> str:
-    link_items = [
-            LinkItem(href=f'{distrib}/', text=distrib)
-            for distrib in pkg_repo_index.all_distributions
-    ]
-    return PAGE_TEMPLATE.render(
-            title='Links for all distributions',
-            link_items=link_items,
+# https://github.com/maxcountryman/flask-login/blob/d4fa75305fdfb73bb55386d95bc09664bca8f902/flask_login/login_manager.py#L330-L331
+@login_manager.request_loader
+def load_user_from_request(_):
+    if request.user_agent.browser is not None:
+        # Is browser.
+        pkg_repo_name = session.get(SESSION_KEY_PKG_REPO_NAME)
+        pkg_repo_secret_raw = session.get(SESSION_KEY_PKG_REPO_SECRET_RAW)
+        if not pkg_repo_name or not pkg_repo_secret_raw:
+            return None
+        return MockUser(pkg_repo_name=pkg_repo_name, pkg_repo_secret_raw=pkg_repo_secret_raw)
+
+    else:
+        # In CLI, always returns a mock user to defer authentication.
+        if request.authorization is None:
+            username = ''
+            password = ''
+        else:
+            username = request.authorization['username']
+            password = request.authorization['password']
+        return MockUser(pkg_repo_name=username, pkg_repo_secret_raw=password)
+
+
+@app.route("/browser_login/", methods=["GET", "POST"])
+def browser_login():
+    if request.method == 'GET':
+        return LOGIN_HTML
+
+    pkg_repo_name = request.form.get('pkg_repo_name')
+    pkg_repo_secret_raw = request.form.get('pkg_repo_secret_raw')
+
+    if not pkg_repo_name or not pkg_repo_secret_raw:
+        return 'Repository name or secret is empty, please refresh this page and submit.', 401
+
+    session[SESSION_KEY_PKG_REPO_NAME] = pkg_repo_name
+    session[SESSION_KEY_PKG_REPO_SECRET_RAW] = pkg_repo_secret_raw
+
+    return redirect(request.args.get("next") or '/simple/')
+
+
+@app.route("/browser_logout/", methods=["GET"])
+def browser_logout():
+    session[SESSION_KEY_PKG_REPO_NAME] = None
+    session[SESSION_KEY_PKG_REPO_SECRET_RAW] = None
+    return redirect('/browser_login/')
+
+
+def load_name_from_request() -> str:
+    return current_user.pkg_repo_name.lower()
+
+
+def load_secret_from_request(wstat: WorkflowStat) -> Tuple[Optional[PkgRepoSecret], str]:
+    name = load_name_from_request()
+    if not name:
+        return None, 'Empty package pepository name.'
+
+    pkg_repo_config = wstat.name_to_pkg_repo_config.get(name)
+    if pkg_repo_config is None:
+        return None, f'Package repository name "{name}" not exists.'
+
+    if not current_user.pkg_repo_secret_raw:
+        return None, f'Secret of the package repository "{name}" is empty.'
+
+    pkg_repo_secret = create_pkg_repo_secret(
+            type=pkg_repo_config.type,
+            raw=current_user.pkg_repo_secret_raw,
     )
+    return pkg_repo_secret, ''
 
 
-def build_distribution_page(distrib: str, pkg_refs: List[PkgRef]) -> str:
-    link_items = []
-    for pkg_ref in pkg_refs:
-        link_items.append(
-                LinkItem(
-                        href=f'{pkg_ref.package}.{pkg_ref.ext}#sha256={pkg_ref.sha256}',
-                        text=f'{pkg_ref.package}.{pkg_ref.ext}',
-                ))
-    return PAGE_TEMPLATE.render(
-            title=f'Links for {distrib}',
-            link_items=link_items,
-    )
+@app.route('/simple/', methods=['GET'])
+@login_required
+def api_simple():
+    pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
+    if pkg_repo_secret is None:
+        return err_msg, 401
+
+    name = load_name_from_request()
+    body, status_code = workflow_api_simple(current_app.workflow_stat, name, pkg_repo_secret)
+    return body, status_code
 
 
-app = Flask(__name__)  # pylint: disable=invalid-name
+@app.route('/simple/<distrib>/', methods=['GET'])
+@login_required
+def api_simple_distrib(distrib):
+    pass
+
+
+@app.route('/simple/<distrib>/<package>', methods=['GET'])
+@login_required
+def api_redirect_package_download_url(distrib, package):
+    pass
+
+
+@app.route('/simple/', methods=['POST'])
+@login_required
+def api_upload_package():
+    pass
 
 
 def run_server(
         config,
         index,
+        config_secret=None,
         stat=None,
         upload=None,
         cache=None,
         host='localhost',
-        port=80,
+        port=8080,
         auth_read_expires=3600,
         auth_write_expires=300,
         cert=None,
@@ -100,3 +172,6 @@ def run_server(
             # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
             ssl_context=ssl_context,
     )
+
+
+run_server_cli = lambda: fire.Fire(run_server)  # pylint: disable=invalid-name

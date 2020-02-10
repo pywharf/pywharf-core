@@ -3,16 +3,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from os.path import exists, getmtime, getsize, join
 import threading
-from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar
+from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar, List
 import traceback
 
 from filelock import FileLock
+from jinja2 import Template
 
 from private_pypi.pkg_repos import (
         LocalPaths,
         PkgRepo,
         PkgRepoConfig,
         PkgRepoSecret,
+        PkgRef,
         PkgRepoIndex,
         create_pkg_repo,
         load_pkg_repo_configs,
@@ -211,6 +213,8 @@ def pkg_repo_secret_is_authenticated(
                 if not auth_passed:
                     ready = False
                     err_msg = f'Auth error (readonly={check_auth_read})'
+            else:
+                err_msg = f'Auth setup error (readonly={check_auth_read})\n' + err_msg
             if not ready:
                 return False, err_msg
 
@@ -243,3 +247,87 @@ def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool
         return False, traceback.format_exc()
 
     return True, ''
+
+
+def get_pkg_repo_index(wstat: WorkflowStat, name: str) -> Tuple[Optional[PkgRepoIndex], str]:
+    index_lock_path, _ = wstat.name_to_index_paths[name]
+    try:
+        with FileLock(index_lock_path, timeout=1.0):
+            return wstat.name_to_pkg_repo_index[name], ''
+
+    except:  # pylint: disable=bare-except
+        return None, traceback.format_exc()
+
+
+@dataclass
+class LinkItem:
+    href: str
+    text: str
+
+
+# PEP 503 -- Simple Repository API
+# https://www.python.org/dev/peps/pep-0503/
+PAGE_TEMPLATE = Template('''<!DOCTYPE html>
+<html>
+<head><title>{{ title }}</title></head>
+<body>
+<h1>{{ title }}</h1>
+
+{% for link_item in link_items %}
+    <a href="{{ link_item.href }}">{{ link_item.text }}</a>
+    <br>
+{% endfor %}
+
+</body>
+</html>
+''')
+
+
+def build_page_api_simple(pkg_repo_index: PkgRepoIndex) -> str:
+    link_items = [
+            LinkItem(href=f'{distrib}/', text=distrib)
+            for distrib in pkg_repo_index.all_distributions
+    ]
+    return PAGE_TEMPLATE.render(
+            title='Links for all distributions',
+            link_items=link_items,
+    )
+
+
+def build_page_api_simple_distrib(distrib: str, pkg_refs: List[PkgRef]) -> str:
+    link_items = []
+    for pkg_ref in pkg_refs:
+        link_items.append(
+                LinkItem(
+                        href=f'{pkg_ref.package}.{pkg_ref.ext}#sha256={pkg_ref.sha256}',
+                        text=f'{pkg_ref.package}.{pkg_ref.ext}',
+                ))
+    return PAGE_TEMPLATE.render(
+            title=f'Links for {distrib}',
+            link_items=link_items,
+    )
+
+
+def workflow_api_simple(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+) -> Tuple[str, int]:
+    passed_auth, err_msg = pkg_repo_secret_is_authenticated(
+            wstat,
+            name,
+            pkg_repo_secret,
+            check_auth_read=True,
+    )
+    if not passed_auth:
+        return err_msg, 401
+
+    passed_index, err_msg = keep_pkg_repo_index_up_to_date(wstat, name)
+    if not passed_index:
+        return err_msg, 404
+
+    pkg_repo_index, err_msg = get_pkg_repo_index(wstat, name)
+    if pkg_repo_index is None:
+        return err_msg, 404
+
+    return build_page_api_simple(pkg_repo_index), 200
