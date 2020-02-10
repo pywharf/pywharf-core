@@ -9,8 +9,8 @@ from private_pypi.pkg_repos import (
 )
 from private_pypi.workflow import (
         build_workflow_stat,
-        pkg_repo_is_expired,
         pkg_repo_secret_is_authenticated,
+        keep_pkg_repo_index_up_to_date,
 )
 from tests.conftest import create_github_auth_token
 
@@ -55,6 +55,9 @@ def test_pkg_repo_secret_is_authenticated(preset_workflow_args):
         )
         assert succeeded
     auth_read_delta = t.delta
+
+    succeeded, _ = keep_pkg_repo_index_up_to_date(wstat, 'preset_github_test')
+    assert succeeded
 
     with Timer() as t:
         for _ in range(100):

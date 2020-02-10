@@ -4,6 +4,9 @@ from datetime import datetime
 from os.path import exists, getmtime, getsize, join
 import threading
 from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar
+import traceback
+
+from filelock import FileLock
 
 from private_pypi.pkg_repos import (
         LocalPaths,
@@ -216,3 +219,27 @@ def pkg_repo_secret_is_authenticated(
             pkg_repo_mtime_shstg.set_item(pkg_repo_secret, datetime.now())
 
         return True, ''
+
+
+def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
+    pkg_repo_config = wstat.name_to_pkg_repo_config[name]
+    index_lock_path, index_path = wstat.name_to_index_paths[name]
+
+    try:
+        # Timeout = 1.0 second should be enough
+        # since the current design is only for small index file.
+        with FileLock(index_lock_path, timeout=1.0):
+            cur_mtime_size = get_mtime_size(index_path)
+            last_mtime_size = wstat.name_to_index_mtime_size[name]
+
+            if cur_mtime_size != last_mtime_size:
+                # Index has been updated, reload.
+                wstat.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
+                        index_path,
+                        pkg_repo_config.type,
+                )
+
+    except:  # pylint: disable=bare-except
+        return False, traceback.format_exc()
+
+    return True, ''
