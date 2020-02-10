@@ -122,12 +122,12 @@ def build_workflow_stat(
     )
 
 
-def should_initialize_pkg_repo(
+def pkg_repo_is_expired(
         wstat: WorkflowStat,
         name: str,
+        pkg_repo_lock: threading.RLock,
         pkg_repo_secret: PkgRepoSecret,
         check_auth_read: bool,
-        pkg_repo_lock: threading.RLock,
 ) -> bool:
     with pkg_repo_lock:
         pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
@@ -161,7 +161,7 @@ def should_initialize_pkg_repo(
         return False
 
 
-def setup_and_authenticate_pkg_repo(
+def pkg_repo_secret_is_authenticated(
         wstat: WorkflowStat,
         name: str,
         pkg_repo_secret: PkgRepoSecret,
@@ -188,12 +188,12 @@ def setup_and_authenticate_pkg_repo(
         else:
             pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_write_mtime_shstg[name]
 
-        if should_initialize_pkg_repo(
+        if pkg_repo_is_expired(
                 wstat,
                 name,
+                pkg_repo_lock,
                 pkg_repo_secret,
                 check_auth_read,
-                pkg_repo_lock,
         ):
             # Initialize.
             pkg_repo = create_pkg_repo(

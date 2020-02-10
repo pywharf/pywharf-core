@@ -9,8 +9,8 @@ from private_pypi.pkg_repos import (
 )
 from private_pypi.workflow import (
         build_workflow_stat,
-        should_initialize_pkg_repo,
-        setup_and_authenticate_pkg_repo,
+        pkg_repo_is_expired,
+        pkg_repo_secret_is_authenticated,
 )
 from tests.conftest import create_github_auth_token
 
@@ -37,7 +37,7 @@ def test_load_pkg_repo_configs(tmp_path):
     assert name_to_configs[gh_config.name] == gh_config
 
 
-def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
+def test_pkg_repo_secret_is_authenticated(preset_workflow_args):
     args = dict(preset_workflow_args)
     args['auth_read_expires'] = 1
     args['auth_write_expires'] = 1
@@ -47,7 +47,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     # Read.
     with Timer() as t:
-        succeeded, _ = setup_and_authenticate_pkg_repo(
+        succeeded, _ = pkg_repo_secret_is_authenticated(
                 wstat,
                 'preset_github_test',
                 secret,
@@ -58,7 +58,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     with Timer() as t:
         for _ in range(100):
-            succeeded, _ = setup_and_authenticate_pkg_repo(
+            succeeded, _ = pkg_repo_secret_is_authenticated(
                     wstat,
                     'preset_github_test',
                     secret,
@@ -70,7 +70,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     time.sleep(1.0)
     with Timer() as t:
-        succeeded, _ = setup_and_authenticate_pkg_repo(
+        succeeded, _ = pkg_repo_secret_is_authenticated(
                 wstat,
                 'preset_github_test',
                 secret,
@@ -82,7 +82,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     # Write.
     with Timer() as t:
-        succeeded, _ = setup_and_authenticate_pkg_repo(
+        succeeded, _ = pkg_repo_secret_is_authenticated(
                 wstat,
                 'preset_github_test',
                 secret,
@@ -93,7 +93,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     with Timer() as t:
         for _ in range(100):
-            succeeded, _ = setup_and_authenticate_pkg_repo(
+            succeeded, _ = pkg_repo_secret_is_authenticated(
                     wstat,
                     'preset_github_test',
                     secret,
@@ -105,7 +105,7 @@ def test_setup_and_authenticate_pkg_repo(preset_workflow_args):
 
     time.sleep(1.0)
     with Timer() as t:
-        succeeded, _ = setup_and_authenticate_pkg_repo(
+        succeeded, _ = pkg_repo_secret_is_authenticated(
                 wstat,
                 'preset_github_test',
                 secret,
