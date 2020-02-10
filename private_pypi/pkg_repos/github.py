@@ -18,6 +18,7 @@ import requests
 import shortuuid
 import toml
 
+import private_pypi
 from private_pypi.pkg_repos.pkg_repo import (
         LocalPaths,
         PkgRef,
@@ -52,6 +53,8 @@ class GitHubConfig(PkgRepoConfig):
     repo: str = ''
     branch: str = 'master'
     index_filename: str = 'index.toml'
+    ping_branch: str = 'ping'
+    ping_filename: str = 'ping.txt'
     large_package_bytes: int = 1024**2
 
     def __post_init__(self):
@@ -706,4 +709,67 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
     return 0
 
 
+def github_create_package_repo(
+        name: str,
+        repo: str,
+        token: str,
+        owner: Optional[str] = None,
+        branch: str = GitHubConfig.branch,
+        index_filename: str = GitHubConfig.index_filename,
+        ping_branch: str = GitHubConfig.ping_branch,
+        ping_filename: str = GitHubConfig.ping_filename,
+):
+    gh_client = github.Github(token)
+    gh_user = gh_client.get_user()
+
+    if owner is None or owner == gh_user.login:
+        gh_entity = gh_user
+    else:
+        gh_entity = gh_client.get_organization(owner)
+
+    # Create repo.
+    description = (
+            'Autogen package repository of python-best-practices/private-pypi '
+            f'({private_pypi.__doc__} homepage https://github.com/python-best-practices/private-pypi), '
+            f'created by user {gh_user.login}. ')
+    gh_repo = gh_entity.create_repo(
+            name=repo,
+            description=description,
+            homepage='https://github.com/python-best-practices/private-pypi',
+            has_issues=False,
+            has_wiki=False,
+            has_downloads=False,
+            has_projects=False,
+            auto_init=True,
+    )
+
+    # Default branch setup.
+    master_ref = gh_repo.get_git_ref('heads/master')
+    master_ref_sha = master_ref._rawData['object']['sha']  # pylint: disable=protected-access
+    if branch != 'master':
+        gh_repo.create_git_ref(f'refs/heads/{branch}', master_ref_sha)
+        gh_repo.edit(default_branch=branch)
+
+    # Ping branch setup.
+    gh_repo.create_git_ref(f'refs/heads/{ping_branch}', master_ref_sha)
+    # Workflow.
+    # TODO
+
+    # Print config.
+    github_config = GitHubConfig(
+            name=name,
+            owner=owner or gh_user.login,
+            repo=repo,
+            branch=branch,
+            index_filename=index_filename,
+            ping_branch=ping_branch,
+            ping_filename=ping_filename,
+    )
+    github_config_dict = asdict(github_config)
+    github_config_dict.pop('name')
+    print('TOML config:\n')
+    print(toml.dumps({name: github_config_dict}))
+
+
+github_create_package_repo_cli = lambda: fire.Fire(github_create_package_repo)  # pylint: disable=invalid-name
 github_upload_package_cli = lambda: fire.Fire(github_upload_package)  # pylint: disable=invalid-name

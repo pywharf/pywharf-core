@@ -1,22 +1,22 @@
 from dataclasses import dataclass
+from os.path import isdir, join, splitext
 from typing import Optional, Tuple
-from os.path import isdir, splitext, join
 import uuid
 
-from flask import Flask, current_app, request, session, redirect
-from flask_login import LoginManager, UserMixin, login_required, current_user
 import fire
+from flask import Flask, current_app, redirect, request, session
+from flask_login import LoginManager, UserMixin, current_user, login_required
 
 from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
+from private_pypi.web_ui import LOGIN_HTML
 from private_pypi.workflow import (
         WorkflowStat,
         build_workflow_stat,
+        workflow_api_redirect_package_download_url,
         workflow_api_simple,
         workflow_api_simple_distrib,
-        workflow_api_redirect_package_download_url,
         workflow_api_upload_package,
 )
-from private_pypi.web_ui import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
 app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'

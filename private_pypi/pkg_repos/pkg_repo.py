@@ -110,6 +110,10 @@ class PkgRepo:
         pass
 
     @abstractmethod
+    def ping(self) -> str:
+        pass
+
+    @abstractmethod
     def upload_package(self, filename: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
         pass
 
