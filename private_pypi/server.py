@@ -14,7 +14,7 @@ from private_pypi.workflow import (
         workflow_api_simple_distrib,
         workflow_api_redirect_package_download_url,
 )
-from private_pypi.web_page import LOGIN_HTML
+from private_pypi.web_ui import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
 app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'
