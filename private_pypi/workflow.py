@@ -331,3 +331,33 @@ def workflow_api_simple(
         return err_msg, 404
 
     return build_page_api_simple(pkg_repo_index), 200
+
+
+def workflow_api_simple_distrib(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+        distrib: str,
+) -> Tuple[str, int]:
+    passed_auth, err_msg = pkg_repo_secret_is_authenticated(
+            wstat,
+            name,
+            pkg_repo_secret,
+            check_auth_read=True,
+    )
+    if not passed_auth:
+        return err_msg, 401
+
+    passed_index, err_msg = keep_pkg_repo_index_up_to_date(wstat, name)
+    if not passed_index:
+        return err_msg, 404
+
+    pkg_repo_index, err_msg = get_pkg_repo_index(wstat, name)
+    if pkg_repo_index is None:
+        return err_msg, 404
+
+    pkg_refs = pkg_repo_index.get_pkg_refs(distrib)
+    if not pkg_refs:
+        return f'distrib={distrib} not found.', 404
+
+    return build_page_api_simple_distrib(distrib, pkg_refs), 200

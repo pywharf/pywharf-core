@@ -10,6 +10,7 @@ from private_pypi.workflow import (
         WorkflowStat,
         build_workflow_stat,
         workflow_api_simple,
+        workflow_api_simple_distrib,
 )
 from private_pypi.web_page import LOGIN_HTML
 
@@ -115,7 +116,18 @@ def api_simple():
 @app.route('/simple/<distrib>/', methods=['GET'])
 @login_required
 def api_simple_distrib(distrib):
-    pass
+    pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
+    if pkg_repo_secret is None:
+        return err_msg, 401
+
+    name = load_name_from_request()
+    body, status_code = workflow_api_simple_distrib(
+            current_app.workflow_stat,
+            name,
+            pkg_repo_secret,
+            distrib,
+    )
+    return body, status_code
 
 
 @app.route('/simple/<distrib>/<package>', methods=['GET'])
