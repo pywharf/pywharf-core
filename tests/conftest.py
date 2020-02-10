@@ -136,7 +136,6 @@ def preset_workflow_args():
             'index_folder': tempfile.mkdtemp(),
             'stat_folder': tempfile.mkdtemp(),
             'cache_folder': tempfile.mkdtemp(),
-            'upload_folder': tempfile.mkdtemp(),
     }
     preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
     write_toml(os.path.join(args['index_folder'], 'preset_github_test.index'),
