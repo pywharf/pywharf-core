@@ -308,11 +308,11 @@ def build_page_api_simple_distrib(distrib: str, pkg_refs: List[PkgRef]) -> str:
     )
 
 
-def workflow_api_simple(
+def workflow_get_pkg_repo_index(
         wstat: WorkflowStat,
         name: str,
         pkg_repo_secret: PkgRepoSecret,
-) -> Tuple[str, int]:
+) -> Tuple[Optional[PkgRepoIndex], str, int]:
     passed_auth, err_msg = pkg_repo_secret_is_authenticated(
             wstat,
             name,
@@ -320,16 +320,31 @@ def workflow_api_simple(
             check_auth_read=True,
     )
     if not passed_auth:
-        return err_msg, 401
+        return None, err_msg, 401
 
     passed_index, err_msg = keep_pkg_repo_index_up_to_date(wstat, name)
     if not passed_index:
-        return err_msg, 404
+        return None, err_msg, 404
 
     pkg_repo_index, err_msg = get_pkg_repo_index(wstat, name)
     if pkg_repo_index is None:
-        return err_msg, 404
+        return None, err_msg, 404
 
+    return pkg_repo_index, '', -1
+
+
+def workflow_api_simple(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+) -> Tuple[str, int]:
+    pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
+            wstat,
+            name,
+            pkg_repo_secret,
+    )
+    if pkg_repo_index is None:
+        return err_msg, status_code
     return build_page_api_simple(pkg_repo_index), 200
 
 
@@ -339,25 +354,46 @@ def workflow_api_simple_distrib(
         pkg_repo_secret: PkgRepoSecret,
         distrib: str,
 ) -> Tuple[str, int]:
-    passed_auth, err_msg = pkg_repo_secret_is_authenticated(
+    pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
             wstat,
             name,
             pkg_repo_secret,
-            check_auth_read=True,
     )
-    if not passed_auth:
-        return err_msg, 401
-
-    passed_index, err_msg = keep_pkg_repo_index_up_to_date(wstat, name)
-    if not passed_index:
-        return err_msg, 404
-
-    pkg_repo_index, err_msg = get_pkg_repo_index(wstat, name)
     if pkg_repo_index is None:
-        return err_msg, 404
+        return err_msg, status_code
 
     pkg_refs = pkg_repo_index.get_pkg_refs(distrib)
     if not pkg_refs:
         return f'distrib={distrib} not found.', 404
 
     return build_page_api_simple_distrib(distrib, pkg_refs), 200
+
+
+def workflow_api_redirect_package_download_url(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+        distrib: str,
+        package: str,
+        ext: str,
+) -> Tuple[Optional[str], str, int]:
+    pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
+            wstat,
+            name,
+            pkg_repo_secret,
+    )
+    if pkg_repo_index is None:
+        return None, err_msg, status_code
+
+    pkg_ref = pkg_repo_index.get_single_pkg_ref(distrib, package)
+    if pkg_ref is None:
+        return None, f'Package "{distrib}, {package}.{ext}" not exists.', 404
+    elif pkg_ref.ext != ext:
+        return None, f'Package "{distrib}, {package}.{ext}" extention not match (query="{ext}")', 404
+
+    try:
+        auth_url = pkg_ref.auth_url(wstat.name_to_pkg_repo_config[name], pkg_repo_secret)
+        return auth_url, '', -1
+
+    except:  # pylint: disable=bare-except
+        return None, 'Failed to get resource.\n' + traceback.format_exc(), 401

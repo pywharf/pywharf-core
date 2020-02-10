@@ -29,9 +29,8 @@ class PkgRepoIndex:
         return self._distrib_to_pkg_refs.get(distrib)
 
     def get_single_pkg_ref(self, query_distrib: str, query_package: str) -> Optional[PkgRef]:
-        distrib = normalize_distribution_name(query_distrib)
         pkg_ref = self._package_to_pkg_ref.get(query_package)
-        if pkg_ref is None or distrib != pkg_ref.distrib:
+        if pkg_ref is None or normalize_distribution_name(query_distrib) != pkg_ref.distrib:
             return None
         return pkg_ref
 

@@ -529,8 +529,11 @@ class GitHubPkgRepo(PkgRepo):
             if not distrib or not sha256:
                 continue
 
-            package, _, ext = release.tag_name.rpartition('.')
+            package, ext = os.path.splitext(release.tag_name)
+            ext = ext.lstrip('.')
             if not package or not ext:
+                continue
+            if len(ext) > len('tar.gz'):
                 continue
 
             raw_assets = release._rawData.get('assets')  # pylint: disable=protected-access

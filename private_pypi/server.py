@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import os.path
 
 from flask import Flask, current_app, request, session, redirect
 from flask_login import LoginManager, UserMixin, login_required, current_user
@@ -11,6 +12,7 @@ from private_pypi.workflow import (
         build_workflow_stat,
         workflow_api_simple,
         workflow_api_simple_distrib,
+        workflow_api_redirect_package_download_url,
 )
 from private_pypi.web_page import LOGIN_HTML
 
@@ -130,10 +132,32 @@ def api_simple_distrib(distrib):
     return body, status_code
 
 
-@app.route('/simple/<distrib>/<package>', methods=['GET'])
+@app.route('/simple/<distrib>/<filename>', methods=['GET'])
 @login_required
-def api_redirect_package_download_url(distrib, package):
-    pass
+def api_redirect_package_download_url(distrib, filename):
+    package, ext = os.path.splitext(filename)
+    ext = ext.lstrip('.')
+    if not ext:
+        return 'Empty extension.', 404
+    if len(ext) > len('tar.gz'):
+        return f'Invalid entension "{ext}"', 404
+
+    pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
+    if pkg_repo_secret is None:
+        return err_msg, 401
+
+    name = load_name_from_request()
+    auth_url, err_msg, status_code = workflow_api_redirect_package_download_url(
+            current_app.workflow_stat,
+            name,
+            pkg_repo_secret,
+            distrib,
+            package,
+            ext,
+    )
+    if auth_url is None:
+        return err_msg, status_code
+    return redirect(auth_url)
 
 
 @app.route('/simple/', methods=['POST'])
