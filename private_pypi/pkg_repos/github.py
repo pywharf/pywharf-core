@@ -385,12 +385,13 @@ class GitHubPkgRepo(PkgRepo):
                             'task_path_dict': asdict(task_path),
                     },
             )
+            pgid = os.getpgrp()
             subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
                     ['private_pypi_github_upload_package', task_path.args, '--remove_args_path'],
                     # Share env for resolving `private_pypi_github_upload_package`.
                     env=dict(os.environ),
                     # Attach to the current process group.
-                    preexec_fn=lambda: os.setpgid(0, os.getpgrp()),
+                    preexec_fn=lambda: os.setpgid(0, pgid),
                     # Suppress stdout and stderr.
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
