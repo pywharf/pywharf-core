@@ -144,7 +144,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def download_index(self, output: str) -> DownloadIndexResult:
+    def download_index(self, path: str) -> DownloadIndexResult:
         pass
 
 

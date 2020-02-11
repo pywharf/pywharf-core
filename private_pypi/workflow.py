@@ -83,6 +83,7 @@ def build_workflow_stat(
         cache_folder: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
+        skip_index_sync: bool = False,
 ) -> WorkflowStat:
     # Config.
     if not exists(pkg_repo_config_file):
@@ -126,9 +127,9 @@ def build_workflow_stat(
             name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
     )
-
-    # Synchronize index.
-    # TODO.
+    if not skip_index_sync:
+        # TODO.
+        pass
 
     # Index file signature (mtime, size) and instance.
     for pkg_repo_config in name_to_pkg_repo_config.values():

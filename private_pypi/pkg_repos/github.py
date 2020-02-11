@@ -561,16 +561,16 @@ class GitHubPkgRepo(PkgRepo):
 
         return pkg_refs
 
+    def _get_index_sha(self) -> Optional[str]:
+        root_tree = self._gh_repo.get_git_tree(self.config.branch, recursive=False)
+        for tree_element in root_tree.tree:
+            if tree_element.path == self.config.index_filename:
+                return tree_element.sha
+        return None
+
     def upload_index(self, path: str) -> UploadIndexResult:
         try:
-            # Check if the index exists in the remote.
-            root_tree = self._gh_repo.get_git_tree(self.config.branch, recursive=False)
-            index_sha = None
-            for tree_element in root_tree.tree:
-                if tree_element.path == self.config.index_filename:
-                    index_sha = tree_element.sha
-                    break
-
+            index_sha = self._get_index_sha()
             if index_sha is None:
                 with open(path, 'rb') as fin:
                     content = fin.read()
@@ -602,13 +602,18 @@ class GitHubPkgRepo(PkgRepo):
             return UploadIndexResult(status=UploadIndexStatus.FAILED, message=error_message)
 
     @record_error_if_raises
-    def download_index(self, output: str) -> DownloadIndexResult:
+    def download_index(self, path: str) -> DownloadIndexResult:
         try:
+            index_sha = self._get_index_sha()
+            if index_sha and os.path.exists(path) and git_hash_sha(path) == index_sha:
+                # Same file, no need to download.
+                return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
+
             content_file = self._gh_repo.get_contents(
                     self.config.index_filename,
                     ref=self.config.branch,
             )
-            with open(output, 'wb') as fout:
+            with open(path, 'wb') as fout:
                 fout.write(content_file.decoded_content)
 
             return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
