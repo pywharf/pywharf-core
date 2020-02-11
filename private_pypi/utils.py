@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+import hashlib
 import os.path
 import re
-from typing import Callable, TextIO
+from typing import Callable, TextIO, Any
 
 from filelock import FileLock
 import toml
@@ -76,3 +77,19 @@ class LockedFileLikeObject(TextIO):  # pylint: disable=abstract-method
 def normalize_distribution_name(name: str) -> str:
     # https://www.python.org/dev/peps/pep-0503/#normalized-names
     return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def update_hash_algo_with_file(path: str, hash_alog: Any) -> None:
+    with open(path, 'rb') as fin:
+        # 64KB block.
+        for block in iter(lambda: fin.read(65536), b''):
+            hash_alog.update(block)
+
+
+def git_hash_sha(path: str) -> str:
+    # https://stackoverflow.com/questions/5290444/why-does-git-hash-object-return-a-different-hash-than-openssl-sha1
+    sha1_algo = hashlib.sha1()
+    size = os.path.getsize(path)
+    sha1_algo.update(f"blob {size}\0".encode())
+    update_hash_algo_with_file(path, sha1_algo)
+    return sha1_algo.hexdigest()

@@ -42,6 +42,8 @@ from private_pypi.utils import (
         normalize_distribution_name,
         read_toml,
         write_toml,
+        update_hash_algo_with_file,
+        git_hash_sha,
 )
 
 GITHUB_TYPE = 'github'
@@ -285,11 +287,7 @@ class GitHubPkgRepo(PkgRepo):
         # SHA256 checksum, also suggested by PEP-503.
         if not ctx.meta.get('sha256'):
             sha256_algo = hashlib.sha256()
-            with open(ctx.path, 'rb') as fin:
-                # 64KB block.
-                for block in iter(lambda: fin.read(65536), b''):
-                    sha256_algo.update(block)
-
+            update_hash_algo_with_file(ctx.path, sha256_algo)
             ctx.meta['sha256'] = sha256_algo.hexdigest()
 
         body = toml.dumps(ctx.meta)
@@ -573,10 +571,9 @@ class GitHubPkgRepo(PkgRepo):
                     index_sha = tree_element.sha
                     break
 
-            with open(path, 'rb') as fin:
-                content = fin.read()
-
             if index_sha is None:
+                with open(path, 'rb') as fin:
+                    content = fin.read()
                 # Index file not exists, create file.
                 self._gh_repo.create_file(
                         path=self.config.index_filename,
@@ -585,8 +582,10 @@ class GitHubPkgRepo(PkgRepo):
                         content=content,
                 )
 
-            else:
-                # Index file exists, update file.
+            elif git_hash_sha(path) != index_sha:
+                with open(path, 'rb') as fin:
+                    content = fin.read()
+                # Index file exists, and need to update.
                 self._gh_repo.update_file(
                         path=self.config.index_filename,
                         message='Index file updated.',

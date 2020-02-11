@@ -22,6 +22,7 @@ from private_pypi.pkg_repos import (
         load_pkg_repo_index,
         load_pkg_repo_secrets,
 )
+from private_pypi.utils import git_hash_sha
 
 SHST = TypeVar('SHST')
 
@@ -52,6 +53,9 @@ class WorkflowStat:
     # Package repository configs.
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
 
+    # Admin secrets for index synchronization.
+    name_to_admin_pkg_repo_secret: Optional[Dict[str, PkgRepoSecret]]
+
     # Package index paths [(<lock-path>, <toml-path>)...]
     name_to_index_paths: Dict[str, Tuple[str, str]]
     name_to_index_mtime_size: Dict[str, Tuple[datetime, int]]
@@ -66,9 +70,6 @@ class WorkflowStat:
     # Read/write last succeeded authentication datetime.
     name_to_pkg_repo_read_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
     name_to_pkg_repo_write_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
-
-    # Admin secrets for index synchronization.
-    name_to_admin_pkg_repo_secret: Optional[Dict[str, PkgRepoSecret]]
 
     # Local paths.
     local_paths: LocalPaths
@@ -89,40 +90,33 @@ def build_workflow_stat(
 
     name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config_file)
 
+    # Admin secret.
+    name_to_admin_pkg_repo_secret = None
+    if admin_pkg_repo_secret_file is not None:
+        name_to_admin_pkg_repo_secret = load_pkg_repo_secrets(admin_pkg_repo_secret_file)
+
     # Index.
     if not isdir(index_folder):
         raise FileNotFoundError(f'--index={index_folder} path invalid.')
 
+    # Index paths of (index_lock, index).
     name_to_index_paths = {}
-    name_to_index_mtime_size = {}
-    name_to_pkg_repo_index = {}
     for pkg_repo_config in name_to_pkg_repo_config.values():
-        index_lock_path = join(index_folder, f'{pkg_repo_config.name}.index.lock')
-
-        index_path = join(index_folder, f'{pkg_repo_config.name}.index')
-        if not exists(index_path):
-            raise FileNotFoundError(
-                    f'index file={index_path} for name={pkg_repo_config.name} not exists')
-
-        name_to_index_paths[pkg_repo_config.name] = (index_lock_path, index_path)
-        name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
-        name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
-                index_path,
-                pkg_repo_config.type,
+        name_to_index_paths[pkg_repo_config.name] = (
+                join(index_folder, f'{pkg_repo_config.name}.index.lock'),
+                join(index_folder, f'{pkg_repo_config.name}.index'),
         )
 
     # Paths for repositories.
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
-    name_to_admin_pkg_repo_secret = None
-    if admin_pkg_repo_secret_file is not None:
-        name_to_admin_pkg_repo_secret = load_pkg_repo_secrets(admin_pkg_repo_secret_file)
-
-    return WorkflowStat(
+    # Build WorkflowStat.
+    wstats = WorkflowStat(
             name_to_pkg_repo_config=name_to_pkg_repo_config,
+            name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
             name_to_index_paths=name_to_index_paths,
-            name_to_index_mtime_size=name_to_index_mtime_size,
-            name_to_pkg_repo_index=name_to_pkg_repo_index,
+            name_to_index_mtime_size={},  # Will setup later.
+            name_to_pkg_repo_index={},  # Will setup later.
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
             pkg_repo_global_lock=threading.Lock(),
@@ -130,9 +124,26 @@ def build_workflow_stat(
             name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
-            name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
             local_paths=local_paths,
     )
+
+    # Synchronize index.
+    # TODO.
+
+    # Index file signature (mtime, size) and instance.
+    for pkg_repo_config in name_to_pkg_repo_config.values():
+        _, index_path = name_to_index_paths[pkg_repo_config.name]
+        if not exists(index_path):
+            raise FileNotFoundError(
+                    f'index file={index_path} for name={pkg_repo_config.name} not exists')
+
+        wstats.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
+        wstats.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
+                index_path,
+                pkg_repo_config.type,
+        )
+
+    return wstats
 
 
 def pkg_repo_is_expired(
