@@ -746,8 +746,26 @@ def github_create_package_repo(
         gh_repo.create_git_ref(f'refs/heads/{branch}', master_ref_sha)
         gh_repo.edit(default_branch=branch)
 
+    # Create empty index. If not, `download_index` will not succeed.
+    gh_repo.create_file(
+            path=index_filename,
+            message='Empty index created.',
+            branch=branch,
+            content='',
+    )
+
     # Workflow setup in the default branch.
-    MAIN_YML = '''name: sync-index
+    main_yaml_content_with = '\n'
+    # For compatibility, don't add the `with` statement if default values are used.
+    if branch != GitHubConfig.branch or index_filename != GitHubConfig.index_filename:
+        main_yaml_content_with = f'''\
+     with:
+       github_branch: {branch}
+       index_filename: {index_filename}
+'''
+    # Body.
+    main_yaml_content = f'''\
+name: sync-index
 on:
  push:
  schedule:
@@ -762,7 +780,7 @@ jobs:
             path='.github/workflows/main.yml',
             message='Workflow sync-index created.',
             branch=branch,
-            content=MAIN_YML,
+            content=main_yaml_content + main_yaml_content_with,
     )
 
     # Print config.
@@ -773,8 +791,17 @@ jobs:
             branch=branch,
             index_filename=index_filename,
     )
+
     github_config_dict = asdict(github_config)
     github_config_dict.pop('name')
+    # Remove the default settings.
+    github_config_dict.pop('large_package_bytes')
+    github_config_dict.pop('max_file_bytes')
+    if branch == GitHubConfig.branch:
+        github_config_dict.pop('branch')
+    if index_filename == GitHubConfig.index_filename:
+        github_config_dict.pop('index_filename')
+
     print('Package repository TOML config (please add to your private-pypi config file):\n')
     print(toml.dumps({name: github_config_dict}))
 
