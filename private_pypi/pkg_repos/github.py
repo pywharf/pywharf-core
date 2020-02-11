@@ -53,8 +53,6 @@ class GitHubConfig(PkgRepoConfig):
     repo: str = ''
     branch: str = 'master'
     index_filename: str = 'index.toml'
-    ping_branch: str = 'ping'
-    ping_filename: str = 'ping.txt'
     large_package_bytes: int = 1024**2
 
     def __post_init__(self):
@@ -716,8 +714,6 @@ def github_create_package_repo(
         owner: Optional[str] = None,
         branch: str = GitHubConfig.branch,
         index_filename: str = GitHubConfig.index_filename,
-        ping_branch: str = GitHubConfig.ping_branch,
-        ping_filename: str = GitHubConfig.ping_filename,
 ):
     gh_client = github.Github(token)
     gh_user = gh_client.get_user()
@@ -750,10 +746,24 @@ def github_create_package_repo(
         gh_repo.create_git_ref(f'refs/heads/{branch}', master_ref_sha)
         gh_repo.edit(default_branch=branch)
 
-    # Ping branch setup.
-    gh_repo.create_git_ref(f'refs/heads/{ping_branch}', master_ref_sha)
-    # Workflow.
-    # TODO
+    # Workflow setup in the default branch.
+    MAIN_YML = '''name: sync-index
+on:
+ push:
+ schedule:
+  - cron: "* * * * *"
+jobs:
+ build:
+  runs-on: ubuntu-latest
+  steps:
+   - uses: python-best-practices/private-pypi-sync-index@master
+'''
+    gh_repo.create_file(
+            path='.github/workflows/main.yml',
+            message='Workflow sync-index created.',
+            branch=branch,
+            content=MAIN_YML,
+    )
 
     # Print config.
     github_config = GitHubConfig(
@@ -762,12 +772,10 @@ def github_create_package_repo(
             repo=repo,
             branch=branch,
             index_filename=index_filename,
-            ping_branch=ping_branch,
-            ping_filename=ping_filename,
     )
     github_config_dict = asdict(github_config)
     github_config_dict.pop('name')
-    print('TOML config:\n')
+    print('Package repository TOML config (please add to your private-pypi config file):\n')
     print(toml.dumps({name: github_config_dict}))
 
 
