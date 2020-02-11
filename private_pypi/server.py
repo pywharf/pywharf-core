@@ -1,4 +1,6 @@
+import atexit
 from dataclasses import dataclass
+import os
 from os.path import isdir, join, splitext
 from typing import Optional, Tuple
 import uuid
@@ -6,6 +8,7 @@ import uuid
 import fire
 from flask import Flask, current_app, redirect, request, session
 from flask_login import LoginManager, UserMixin, current_user, login_required
+import psutil
 
 from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
 from private_pypi.web_ui import LOGIN_HTML
@@ -210,6 +213,16 @@ def api_upload_package():  # pylint: disable=too-many-return-statements
     return body, status_code
 
 
+def stop_all_children_processes():
+    procs = psutil.Process().children()
+    for proc in procs:
+        proc.terminate()
+
+    _, alive = psutil.wait_procs(procs, timeout=10)
+    for proc in alive:
+        proc.kill()
+
+
 def run_server(
         config: str,
         index: str,
@@ -222,6 +235,7 @@ def run_server(
         auth_write_expires: int = 300,
         cert: Optional[str] = None,
         pkey: Optional[str] = None,
+        debug: bool = False,
 ):
     """Run the private-pypi server.
 
@@ -276,17 +290,28 @@ Defaults to None.
     if cert and pkey:
         ssl_context = (cert, pkey)
 
-    app.run(
-            host=host,
-            port=port,
-            load_dotenv=False,
-            # Must be threaded for the current design.
-            threaded=True,
-            # SSL.
-            # https://werkzeug.palletsprojects.com/en/0.16.x/serving/#werkzeug.serving.run_simple
-            # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
-            ssl_context=ssl_context,
-    )
+    # All processes in the current process group will be terminated
+    # with the lead process.
+    os.setpgrp()
+    atexit.register(stop_all_children_processes)
+
+    if debug:
+        app.run(
+                host=host,
+                port=port,
+                load_dotenv=False,
+                # Must be threaded for the current design.
+                threaded=True,
+                # SSL.
+                # https://werkzeug.palletsprojects.com/en/0.16.x/serving/#werkzeug.serving.run_simple
+                # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
+                ssl_context=ssl_context,
+                debug=True,
+        )
+
+    else:
+        # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html#arguments
+        raise NotImplementedError('TODO: waitress.server')
 
 
 run_server_cli = lambda: fire.Fire(run_server)  # pylint: disable=invalid-name

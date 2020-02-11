@@ -22,7 +22,6 @@ from private_pypi.pkg_repos import (
         load_pkg_repo_index,
         load_pkg_repo_secrets,
 )
-from private_pypi.utils import git_hash_sha
 
 SHST = TypeVar('SHST')
 
@@ -448,3 +447,8 @@ def workflow_api_upload_package(
         raise ValueError('Invalid UploadPackageStatus')
 
     return result.message, status_code
+
+
+def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
+    # TODO
+    return True, ''

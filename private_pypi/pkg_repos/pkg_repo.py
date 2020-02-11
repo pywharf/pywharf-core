@@ -140,6 +140,10 @@ class PkgRepo:
         pass
 
     @abstractmethod
+    def local_index_is_up_to_date(self, path: str) -> bool:
+        pass
+
+    @abstractmethod
     def upload_index(self, path: str) -> UploadIndexResult:
         pass
 

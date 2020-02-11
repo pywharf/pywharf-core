@@ -353,8 +353,9 @@ class GitHubPkgRepo(PkgRepo):
                     task_id=task_id,
             )
 
-        if os.path.getsize(path) < self.config.large_package_bytes:
-            # Small package.
+        if self.config.large_package_bytes <= 0 \
+                or os.path.getsize(path) < self.config.large_package_bytes:
+            # Small package, or the background upload feature is disabled.
             ctx = self.upload_package_task(filename, meta, path)
             status = UploadPackageStatus.SUCCEEDED if not ctx.failed else UploadPackageStatus.FAILED
             return UploadPackageResult(
@@ -363,7 +364,7 @@ class GitHubPkgRepo(PkgRepo):
             )
 
         else:
-            # Large package.
+            # Large package, upload in background.
             task_id = shortuuid.ShortUUID().random(length=6)
             task_path.task_id = task_id
 
@@ -388,8 +389,8 @@ class GitHubPkgRepo(PkgRepo):
                     ['private_pypi_github_upload_package', task_path.args, '--remove_args_path'],
                     # Share env for resolving `private_pypi_github_upload_package`.
                     env=dict(os.environ),
-                    # Add to the current process group.
-                    preexec_fn=os.setpgrp,
+                    # Attach to the current process group.
+                    preexec_fn=lambda: os.setpgid(0, os.getpgrp()),
                     # Suppress stdout and stderr.
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -601,11 +602,21 @@ class GitHubPkgRepo(PkgRepo):
             self.record_error(error_message)
             return UploadIndexResult(status=UploadIndexStatus.FAILED, message=error_message)
 
+    # This function could raise exception.
+    def local_index_is_up_to_date(self, path: str) -> bool:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f'{path} not exists.')
+
+        index_sha = self._get_index_sha()
+        if not index_sha:
+            raise FileNotFoundError('Remote sha not found.')
+
+        return index_sha == git_hash_sha(path)
+
     @record_error_if_raises
     def download_index(self, path: str) -> DownloadIndexResult:
         try:
-            index_sha = self._get_index_sha()
-            if index_sha and os.path.exists(path) and git_hash_sha(path) == index_sha:
+            if os.path.exists(path) and self.local_index_is_up_to_date(path):
                 # Same file, no need to download.
                 return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
 
