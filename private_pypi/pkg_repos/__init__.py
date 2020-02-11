@@ -107,12 +107,25 @@ def load_pkg_repo_configs(path: str) -> Dict[str, PkgRepoConfig]:
 
     for name, struct in read_toml(path).items():
         if not isinstance(struct, dict):
-            raise ValueError(f'Invalid config, name={name}, struct={struct}')
+            raise ValueError(f'Invalid pkg_repo_config, name={name}, struct={struct}')
 
         config = create_pkg_repo_config(name=name, **struct)
         name_to_pkg_repo_config[name] = config
 
     return name_to_pkg_repo_config
+
+
+def load_pkg_repo_secrets(path: str) -> Dict[str, PkgRepoSecret]:
+    name_to_pkg_repo_secret: Dict[str, PkgRepoSecret] = {}
+
+    for name, struct in read_toml(path).items():
+        if not isinstance(struct, dict):
+            raise ValueError(f'Invalid pkg_repo_secret, name={name}, struct={struct}')
+
+        secret = create_pkg_repo_secret(name=name, **struct)
+        name_to_pkg_repo_secret[name] = secret
+
+    return name_to_pkg_repo_secret
 
 
 def dump_pkg_repo_index(path: str, pkg_repo_index: PkgRepoIndex):

@@ -99,6 +99,7 @@ def load_secret_from_request(wstat: WorkflowStat) -> Tuple[Optional[PkgRepoSecre
         return None, f'Secret of the package repository "{name}" is empty.'
 
     pkg_repo_secret = create_pkg_repo_secret(
+            name=name,
             type=pkg_repo_config.type,
             raw=current_user.pkg_repo_secret_raw,
     )
@@ -212,7 +213,7 @@ def api_upload_package():  # pylint: disable=too-many-return-statements
 def run_server(
         config: str,
         index: str,
-        config_secret: Optional[str] = None,
+        admin_secret: Optional[str] = None,
         stat: Optional[str] = None,
         cache: Optional[str] = None,
         host: str = 'localhost',
@@ -229,8 +230,8 @@ def run_server(
 Path to the package repositories config.
         index (str): \
 Path to the index folder. \
-The folder could be empty if --config_secret is provided.
-        config_secret (Optional[str], optional): \
+The folder could be empty if --admin_secret is provided.
+        admin_secret (Optional[str], optional): \
 Path to the admin secrets config with read/write permission. \
 This field is required for index synchronization on-the-fly. \
 Defaults to None.
@@ -263,6 +264,7 @@ Defaults to None.
         # Init.
         current_app.workflow_stat = build_workflow_stat(
                 pkg_repo_config_file=config,
+                admin_pkg_repo_secret_file=admin_secret,
                 index_folder=index,
                 stat_folder=stat,
                 cache_folder=cache,

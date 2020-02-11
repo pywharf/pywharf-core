@@ -20,6 +20,7 @@ from private_pypi.pkg_repos import (
         create_pkg_repo,
         load_pkg_repo_configs,
         load_pkg_repo_index,
+        load_pkg_repo_secrets,
 )
 
 SHST = TypeVar('SHST')
@@ -56,15 +57,18 @@ class WorkflowStat:
     name_to_index_mtime_size: Dict[str, Tuple[datetime, int]]
     name_to_pkg_repo_index: Dict[str, PkgRepoIndex]
 
-    # Locked package repos.
+    # Package repositories guarded by threading locks.
     auth_read_expires: int
     auth_write_expires: int
     pkg_repo_global_lock: threading.Lock
     name_to_pkg_repo_lock_shstg: DefaultDict[str, SecretHashedStorage[threading.RLock]]
     name_to_pkg_repo_shstg: DefaultDict[str, SecretHashedStorage[PkgRepo]]
-    # Read.
+    # Read/write last succeeded authentication datetime.
     name_to_pkg_repo_read_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
     name_to_pkg_repo_write_mtime_shstg: DefaultDict[str, SecretHashedStorage[datetime]]
+
+    # Admin secrets for index synchronization.
+    name_to_admin_pkg_repo_secret: Optional[Dict[str, PkgRepoSecret]]
 
     # Local paths.
     local_paths: LocalPaths
@@ -72,6 +76,7 @@ class WorkflowStat:
 
 def build_workflow_stat(
         pkg_repo_config_file: str,
+        admin_pkg_repo_secret_file: Optional[str],
         index_folder: str,
         stat_folder: Optional[str],
         cache_folder: Optional[str],
@@ -109,6 +114,10 @@ def build_workflow_stat(
     # Paths for repositories.
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
+    name_to_admin_pkg_repo_secret = None
+    if admin_pkg_repo_secret_file is not None:
+        name_to_admin_pkg_repo_secret = load_pkg_repo_secrets(admin_pkg_repo_secret_file)
+
     return WorkflowStat(
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_index_paths=name_to_index_paths,
@@ -121,6 +130,7 @@ def build_workflow_stat(
             name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
             name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
+            name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
             local_paths=local_paths,
     )
 

@@ -6,6 +6,7 @@ import traceback
 from typing import Dict, List, Optional, Tuple, TypeVar
 
 
+# TODO: Using dataclass with inheritance leads to some issues, need to reconsider the design.
 @dataclass
 class PkgRepoConfig:
     name: str
@@ -15,6 +16,7 @@ class PkgRepoConfig:
 
 @dataclass
 class PkgRepoSecret:
+    name: str
     raw: str
     type: str = ''
 

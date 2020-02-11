@@ -92,7 +92,7 @@ def create_github_pkg_repo_for_test(name):
     owner, repo, token = setup_test_github_repo()
     return GitHubPkgRepo(
             config=GitHubConfig(name=name, owner=owner, repo=repo, large_package_bytes=512),
-            secret=GitHubAuthToken(raw=token),
+            secret=GitHubAuthToken(name=name, raw=token),
             local_paths=LocalPaths(
                     stat=str(tempfile.mkdtemp()),
                     cache=str(tempfile.mkdtemp()),
@@ -113,7 +113,7 @@ def dirty_github_pkg_repo():
 def create_github_auth_token():
     gh_token = os.getenv('TEST_GITHUB_TOKEN')
     assert gh_token
-    return GitHubAuthToken(raw=gh_token)
+    return GitHubAuthToken(name='test_github_token', raw=gh_token)
 
 
 @pytest.fixture(scope='session')
@@ -136,6 +136,7 @@ def preset_workflow_args():
             'index_folder': tempfile.mkdtemp(),
             'stat_folder': tempfile.mkdtemp(),
             'cache_folder': tempfile.mkdtemp(),
+            'admin_pkg_repo_secret_file': None,
     }
     preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
     write_toml(os.path.join(args['index_folder'], 'preset_github_test.index'),
