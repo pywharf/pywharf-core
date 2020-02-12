@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import os
 from os.path import isdir, join, splitext
 from typing import Any, Optional, Tuple
-from urllib.parse import urljoin
 import uuid
 
 import fire
@@ -142,9 +141,9 @@ def api_simple_distrib(distrib):
             distrib,
     )
 
-    if status_code == 404 and app.config['EXTRA_INDEX_URL']:
+    if status_code == 404 and app.config['EXTRA_INDEX_URL'] != '/':
         # Redirect to extra index if not found.
-        return redirect(urljoin(app.config['EXTRA_INDEX_URL'], distrib + '/'))
+        return redirect(app.config['EXTRA_INDEX_URL'] + f'/{distrib}/')
 
     return body, status_code
 
@@ -292,6 +291,8 @@ Defaults to 8080.
     os.setpgrp()
     atexit.register(stop_all_children_processes)
 
+    # Make sure EXTRA_INDEX_URL ends with slash.
+    # NOTE: EXTRA_INDEX_URL will be set as '/' if --extra_index_url=''.
     app.config['EXTRA_INDEX_URL'] = extra_index_url.rstrip('/') + '/'
 
     with app.app_context():
