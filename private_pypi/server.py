@@ -3,13 +3,14 @@ from dataclasses import dataclass
 import os
 from os.path import isdir, join, splitext
 from typing import Optional, Tuple
-import uuid
 from urllib.parse import urljoin
+import uuid
 
 import fire
 from flask import Flask, current_app, redirect, request, session
 from flask_login import LoginManager, UserMixin, current_user, login_required
 import psutil
+import waitress
 
 from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
 from private_pypi.web_ui import LOGIN_HTML
@@ -243,8 +244,7 @@ def run_server(
         auth_read_expires: int = 3600,
         auth_write_expires: int = 300,
         extra_index_url: str = 'https://pypi.org/simple/',
-        cert: Optional[str] = None,
-        pkey: Optional[str] = None,
+        threads: int = 4,
         debug: bool = False,
 ):
     """Run the private-pypi server.
@@ -277,13 +277,7 @@ Defaults to 3600.
         auth_write_expires (int, optional): \
 The expiration time in seconds for read authentication. \
 Defaults to 300.
-        cert (Optional[str], optional): \
-Specify a certificate file to use HTTPS. \
-Defaults to None.
-        pkey (Optional[str], optional): \
-The key file to use when specifying a certificate. \
-Defaults to None.
-    """
+"""
     # All processes in the current process group will be terminated
     # with the lead process.
     os.setpgrp()
@@ -302,10 +296,6 @@ Defaults to None.
                 auth_read_expires=auth_read_expires,
                 auth_write_expires=auth_write_expires,
         )
-
-    ssl_context = None
-    if cert and pkey:
-        ssl_context = (cert, pkey)
 
     if debug:
 
@@ -332,15 +322,17 @@ Defaults to None.
                 load_dotenv=False,
                 # Must be threaded for the current design.
                 threaded=True,
-                # SSL.
-                # https://werkzeug.palletsprojects.com/en/0.16.x/serving/#werkzeug.serving.run_simple
-                # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
-                ssl_context=ssl_context,
         )
 
     else:
         # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html#arguments
-        raise NotImplementedError('TODO: waitress.serve')
+        waitress.serve(
+                app,
+                host=host,
+                port=port,
+                threads=threads,
+                channel_timeout=600,
+        )
 
 
 run_server_cli = lambda: fire.Fire(run_server)  # pylint: disable=invalid-name
