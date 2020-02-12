@@ -2,7 +2,7 @@ import atexit
 from dataclasses import dataclass
 import os
 from os.path import isdir, join, splitext
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from urllib.parse import urljoin
 import uuid
 
@@ -11,6 +11,7 @@ from flask import Flask, current_app, redirect, request, session
 from flask_login import LoginManager, UserMixin, current_user, login_required
 import psutil
 import waitress
+from paste.translogger import TransLogger
 
 from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
 from private_pypi.web_ui import LOGIN_HTML
@@ -239,13 +240,13 @@ def run_server(
         admin_secret: Optional[str] = None,
         stat: Optional[str] = None,
         cache: Optional[str] = None,
-        host: str = 'localhost',
-        port: int = 8888,
         auth_read_expires: int = 3600,
         auth_write_expires: int = 300,
         extra_index_url: str = 'https://pypi.org/simple/',
-        threads: int = 4,
         debug: bool = False,
+        host: str = 'localhost',
+        port: int = 8888,
+        **waitress_options: Any,
 ):
     """Run the private-pypi server.
 
@@ -267,16 +268,24 @@ Defaults to None.
 Path to the cache folder for the file upload and download. \
 This field is required for the upload API and local cache feature. \
 Defaults to None.
-        host (str, optional): \
-The interface to bind to. Defaults to 'localhost'.
-        port (int, optional): \
-The port to bind to. Defaults to 8080.
         auth_read_expires (int, optional): \
 The expiration time in seconds for read authentication. \
 Defaults to 3600.
         auth_write_expires (int, optional): \
 The expiration time in seconds for read authentication. \
 Defaults to 300.
+        extra_index_url (str, optional): \
+Extra index url for redirection in case package not found. \
+If set to empty string explicitly redirection will be suppressed. \
+Defaults to 'https://pypi.org/simple/'.
+        debug (bool, optional): \
+Enable debug mode.
+        host (str, optional): \
+The interface to bind to. \
+Defaults to 'localhost'.
+        port (int, optional): \
+The port to bind to. \
+Defaults to 8080.
 """
     # All processes in the current process group will be terminated
     # with the lead process.
@@ -298,6 +307,9 @@ Defaults to 300.
         )
 
     if debug:
+        if waitress_options:
+            raise RuntimeError(
+                    f'--waitress_options={waitress_options} should be empty in debug mode.')
 
         def print_request():
             print('==== REQUEST URL ====')
@@ -325,13 +337,14 @@ Defaults to 300.
         )
 
     else:
+        print(f'waitress.serve host={host}, port={port}, waitress_options={waitress_options}')
         # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html#arguments
+        # https://docs.pylonsproject.org/projects/waitress/en/stable/logging.html
         waitress.serve(
-                app,
+                TransLogger(app),
                 host=host,
                 port=port,
-                threads=threads,
-                channel_timeout=600,
+                **waitress_options,
         )
 
 
