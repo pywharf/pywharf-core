@@ -17,11 +17,13 @@ from private_pypi.pkg_repos import (
         PkgRef,
         PkgRepoIndex,
         UploadPackageStatus,
+        DownloadIndexStatus,
         create_pkg_repo,
         load_pkg_repo_configs,
         load_pkg_repo_index,
         load_pkg_repo_secrets,
 )
+from private_pypi.utils import locked_copy_file
 
 SHST = TypeVar('SHST')
 
@@ -111,7 +113,7 @@ def build_workflow_stat(
     local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
     # Build WorkflowStat.
-    wstats = WorkflowStat(
+    wstat = WorkflowStat(
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
             name_to_index_paths=name_to_index_paths,
@@ -126,9 +128,11 @@ def build_workflow_stat(
             name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
             local_paths=local_paths,
     )
-    if not skip_index_sync:
-        # TODO.
-        pass
+
+    if not skip_index_sync and name_to_admin_pkg_repo_secret:
+        passed, log = sync_local_index(wstat)
+        if not passed:
+            raise RuntimeError(log)
 
     # Index file signature (mtime, size) and instance.
     for pkg_repo_config in name_to_pkg_repo_config.values():
@@ -137,13 +141,13 @@ def build_workflow_stat(
             raise FileNotFoundError(
                     f'index file={index_path} for name={pkg_repo_config.name} not exists')
 
-        wstats.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
-        wstats.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
+        wstat.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
+        wstat.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
                 index_path,
                 pkg_repo_config.type,
         )
 
-    return wstats
+    return wstat
 
 
 def pkg_repo_is_expired(
@@ -450,5 +454,52 @@ def workflow_api_upload_package(
 
 
 def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
-    # TODO
-    return True, ''
+    if wstat.name_to_admin_pkg_repo_secret is None:
+        return False, 'name_to_admin_pkg_repo_secret is None.'
+
+    passed = True
+    logs = []
+
+    for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
+        name = pkg_repo_config.name
+
+        pkg_repo_sercret = wstat.name_to_admin_pkg_repo_secret.get(name)
+        if pkg_repo_sercret is None:
+            logs.append(f'[WARN] secret of "{name}" is not provided, skip index sync.')
+            continue
+
+        index_lock_path, index_path = wstat.name_to_index_paths[name]
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        index_tmp_path = f'{index_path}.tmp.{timestamp}'
+
+        try:
+            pkg_repo = create_pkg_repo(
+                    config=pkg_repo_config,
+                    secret=pkg_repo_sercret,
+                    local_paths=wstat.local_paths,
+            )
+
+            up_to_date = False
+            if exists(index_path):
+                # Make a copy to avoid holding the lock for a long time.
+                locked_copy_file(index_lock_path, index_path, index_tmp_path, timeout=0.1)
+                # Check.
+                up_to_date = pkg_repo.local_index_is_up_to_date(index_tmp_path)
+
+            if not up_to_date:
+                # Sync.
+                result = pkg_repo.download_index(index_tmp_path)
+                if result.status != DownloadIndexStatus.SUCCEEDED:
+                    passed = False
+                    logs.append(f'[ERROR] "{name}" failed to download index:\n' + result.message)
+                    continue
+                # And replace.
+                locked_copy_file(index_lock_path, index_tmp_path, index_path, timeout=0.1)
+
+            logs.append(f'[PASS] "{name}" is up-to-date.')
+
+        except:  # pylint: disable=bare-except
+            passed = False
+            logs.append(f'[ERROR] traceback of "{name}":\n' + traceback.format_exc())
+
+    return passed, '\n'.join(logs)

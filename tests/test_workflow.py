@@ -117,3 +117,13 @@ def test_pkg_repo_secret_is_authenticated(preset_workflow_args):
         assert succeeded
     expired_write_delta = t.delta
     assert expired_write_delta > 100 * cached_write_delta
+
+
+def test_index_sync(preset_workflow_with_admin_secret_args):
+    args = dict(preset_workflow_with_admin_secret_args)
+    args['auth_read_expires'] = 1
+    args['auth_write_expires'] = 1
+
+    wstat = build_workflow_stat(**args)
+    assert wstat.name_to_index_mtime_size
+    assert wstat.name_to_pkg_repo_index

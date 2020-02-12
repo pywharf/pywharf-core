@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import os
 import os.path
 from datetime import date, datetime
@@ -139,8 +140,27 @@ def preset_workflow_args():
             'admin_pkg_repo_secret_file': None,
     }
     preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
-    write_toml(os.path.join(args['index_folder'], 'preset_github_test.index'),
-               preset_github_test_index)
+    write_toml(
+            os.path.join(args['index_folder'], 'preset_github_test.index'),
+            preset_github_test_index,
+    )
+    yield args
+
+
+@pytest.fixture(scope='session')
+def preset_workflow_with_admin_secret_args():
+    admin_pkg_repo_secret_file = os.path.join(tempfile.mkdtemp(), 'admin_secret.toml')
+    secret_dict = asdict(create_github_auth_token())
+    secret_dict.pop('name')
+    write_toml(admin_pkg_repo_secret_file, {'preset_github_test': secret_dict})
+
+    args = {
+            'pkg_repo_config_file': 'tests/fixtures/preset_config.toml',
+            'index_folder': tempfile.mkdtemp(),
+            'stat_folder': tempfile.mkdtemp(),
+            'cache_folder': tempfile.mkdtemp(),
+            'admin_pkg_repo_secret_file': admin_pkg_repo_secret_file,
+    }
     yield args
 
 

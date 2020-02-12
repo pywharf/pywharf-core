@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import hashlib
 import os.path
 import re
+import shutil
 from typing import Callable, TextIO, Any
 
 from filelock import FileLock
@@ -49,6 +50,15 @@ def locked_write_file(lock_path, file_path, text, timeout=-1):
 
 def locked_write_toml(lock_path, file_path, struct, timeout=-1):
     return locked_write_file(lock_path, file_path, toml.dumps(struct), timeout=timeout)
+
+
+def locked_copy_file(lock_path, src_path, dst_path, timeout=-1):
+    try:
+        with FileLock(lock_path, timeout=timeout):
+            shutil.copyfile(src_path, dst_path)
+            return True
+    except TimeoutError:
+        return False
 
 
 def file_lock_is_busy(lock_path):

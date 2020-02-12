@@ -274,6 +274,11 @@ Defaults to None.
 The key file to use when specifying a certificate. \
 Defaults to None.
     """
+    # All processes in the current process group will be terminated
+    # with the lead process.
+    os.setpgrp()
+    atexit.register(stop_all_children_processes)
+
     with app.app_context():
         # Init.
         current_app.workflow_stat = build_workflow_stat(
@@ -289,11 +294,6 @@ Defaults to None.
     ssl_context = None
     if cert and pkey:
         ssl_context = (cert, pkey)
-
-    # All processes in the current process group will be terminated
-    # with the lead process.
-    os.setpgrp()
-    atexit.register(stop_all_children_processes)
 
     if debug:
         app.run(
@@ -311,7 +311,7 @@ Defaults to None.
 
     else:
         # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html#arguments
-        raise NotImplementedError('TODO: waitress.server')
+        raise NotImplementedError('TODO: waitress.serve')
 
 
 run_server_cli = lambda: fire.Fire(run_server)  # pylint: disable=invalid-name
