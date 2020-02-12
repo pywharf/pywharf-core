@@ -742,13 +742,13 @@ def github_create_package_repo(
 
     # Create repo.
     description = (
-            'Autogen package repository of python-best-practices/private-pypi '
-            f'({private_pypi.__doc__} homepage https://github.com/python-best-practices/private-pypi), '
+            'Autogen package repository of private-pypi/private-pypi '
+            f'({private_pypi.__doc__} homepage https://github.com/private-pypi/private-pypi), '
             f'created by user {gh_user.login}. ')
     gh_repo = gh_entity.create_repo(
             name=repo,
             description=description,
-            homepage='https://github.com/python-best-practices/private-pypi',
+            homepage='https://github.com/private-pypi/private-pypi',
             has_issues=False,
             has_wiki=False,
             has_downloads=False,
@@ -791,7 +791,7 @@ jobs:
  build:
   runs-on: ubuntu-latest
   steps:
-   - uses: python-best-practices/private-pypi-sync-index@master
+   - uses: private-pypi/private-pypi-sync-index@master
 '''
     gh_repo.create_file(
             path='.github/workflows/main.yml',

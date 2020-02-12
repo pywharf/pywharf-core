@@ -5,7 +5,7 @@ description = "A private PyPI server powered by backend(s) like GitHub."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
 readme = "README.md"
-repository = "https://github.com/python-best-practices/private-pypi"
+repository = "https://github.com/private-pypi/private-pypi"
 keywords = ["private", "pypi", "github", "packaging", "dependency"]
 classifiers = [
     "Topic :: Software Development :: Build Tools",
@@ -14,7 +14,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 # TODO: Will support all python versions in the future
-# by using https://github.com/python-best-practices/wheel-compiler
+# by using https://github.com/private-pypi/wheel-compiler
 python = "^3.7"
 requests = "^2.22.0"
 PyGithub = "^1.45"

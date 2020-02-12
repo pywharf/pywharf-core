@@ -70,14 +70,14 @@ def setup_test_github_repo():
 
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
     description = (
-            'Autogen test repo for the project python-best-practices/private-pypi '
-            f'({private_pypi.__doc__} homepage https://github.com/python-best-practices/private-pypi), '
+            'Autogen test repo for the project private-pypi/private-pypi '
+            f'({private_pypi.__doc__} homepage https://github.com/private-pypi/private-pypi), '
             f'created by user {gh_user.login}. ')
     repo_name = f'private-pypi-test-{timestamp}'
     gh_user.create_repo(
             name=repo_name,
             description=description,
-            homepage='https://github.com/python-best-practices/private-pypi',
+            homepage='https://github.com/private-pypi/private-pypi',
             has_issues=False,
             has_wiki=False,
             has_downloads=False,
