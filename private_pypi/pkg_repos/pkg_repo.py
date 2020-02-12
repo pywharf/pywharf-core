@@ -12,6 +12,7 @@ class PkgRepoConfig:
     name: str
     type: str = ''
     max_file_bytes: int = 1024**3
+    local_sync_index_interval: int = 60
 
 
 @dataclass

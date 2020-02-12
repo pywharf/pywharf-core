@@ -730,6 +730,7 @@ def github_create_package_repo(
         owner: Optional[str] = None,
         branch: str = GitHubConfig.branch,
         index_filename: str = GitHubConfig.index_filename,
+        local_sync_index_interval: int = GitHubConfig.local_sync_index_interval,
 ):
     gh_client = github.Github(token)
     gh_user = gh_client.get_user()
@@ -810,13 +811,16 @@ jobs:
 
     github_config_dict = asdict(github_config)
     github_config_dict.pop('name')
-    # Remove the default settings.
+
+    # Pop the default settings.
     github_config_dict.pop('large_package_bytes')
     github_config_dict.pop('max_file_bytes')
     if branch == GitHubConfig.branch:
         github_config_dict.pop('branch')
     if index_filename == GitHubConfig.index_filename:
         github_config_dict.pop('index_filename')
+    if local_sync_index_interval == GitHubConfig.local_sync_index_interval:
+        github_config_dict.pop('local_sync_index_interval')
 
     print('Package repository TOML config (please add to your private-pypi config file):\n')
     print(toml.dumps({name: github_config_dict}))

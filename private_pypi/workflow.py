@@ -1,29 +1,35 @@
 from collections import defaultdict
+import contextlib
 from dataclasses import dataclass
 from datetime import datetime
-from os.path import exists, isdir, getmtime, getsize, join
+import logging
+import os
+from os.path import exists, getmtime, getsize, isdir, join
+import subprocess
 import threading
-from typing import DefaultDict, Dict, Generic, Optional, Tuple, TypeVar, List
+import time
 import traceback
+from typing import DefaultDict, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from filelock import FileLock
+import fire
 from jinja2 import Template
 
 from private_pypi.pkg_repos import (
+        DownloadIndexStatus,
         LocalPaths,
+        PkgRef,
         PkgRepo,
         PkgRepoConfig,
-        PkgRepoSecret,
-        PkgRef,
         PkgRepoIndex,
+        PkgRepoSecret,
         UploadPackageStatus,
-        DownloadIndexStatus,
         create_pkg_repo,
         load_pkg_repo_configs,
         load_pkg_repo_index,
         load_pkg_repo_secrets,
 )
-from private_pypi.utils import locked_copy_file
+from private_pypi.utils import LockedFileLikeObject, locked_copy_file
 
 SHST = TypeVar('SHST')
 
@@ -84,7 +90,6 @@ def build_workflow_stat(
         cache_folder: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
-        skip_index_sync: bool = False,
 ) -> WorkflowStat:
     # Config.
     if not exists(pkg_repo_config_file):
@@ -129,7 +134,7 @@ def build_workflow_stat(
             local_paths=local_paths,
     )
 
-    if not skip_index_sync and name_to_admin_pkg_repo_secret:
+    if name_to_admin_pkg_repo_secret:
         passed, log = sync_local_index(wstat)
         if not passed:
             raise RuntimeError(log)
@@ -145,6 +150,160 @@ def build_workflow_stat(
         wstat.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
                 index_path,
                 pkg_repo_config.type,
+        )
+
+    return wstat
+
+
+def sync_single_local_index(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
+    pkg_repo_config = wstat.name_to_pkg_repo_config[name]
+
+    pkg_repo_sercret = wstat.name_to_admin_pkg_repo_secret.get(name)
+    if pkg_repo_sercret is None:
+        return True, f'[WARN] secret of "{name}" is not provided, skip index sync.'
+
+    index_lock_path, index_path = wstat.name_to_index_paths[name]
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+    index_tmp_path = f'{index_path}.tmp.{timestamp}'
+
+    try:
+        pkg_repo = create_pkg_repo(
+                config=pkg_repo_config,
+                secret=pkg_repo_sercret,
+                local_paths=wstat.local_paths,
+        )
+
+        up_to_date = False
+        if exists(index_path):
+            # Make a copy to avoid holding the lock for a long time.
+            locked_copy_file(index_lock_path, index_path, index_tmp_path, timeout=0.1)
+            # Check.
+            up_to_date = pkg_repo.local_index_is_up_to_date(index_tmp_path)
+
+        if not up_to_date:
+            # Sync.
+            result = pkg_repo.download_index(index_tmp_path)
+            if result.status != DownloadIndexStatus.SUCCEEDED:
+                return False, f'[ERROR] "{name}" failed to download index:\n' + result.message
+            # And replace.
+            locked_copy_file(index_lock_path, index_tmp_path, index_path, timeout=0.1)
+
+        # index_tmp_path should exists.
+        try:
+            os.remove(index_tmp_path)
+        except IOError:
+            pass
+
+        return True, f'[PASS] "{name}" is up-to-date.'
+
+    except:  # pylint: disable=bare-except
+        return False, f'[ERROR] traceback of "{name}":\n' + traceback.format_exc()
+
+
+def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
+    if wstat.name_to_admin_pkg_repo_secret is None:
+        return False, 'name_to_admin_pkg_repo_secret is None.'
+
+    all_passed = []
+    all_logs = []
+    for name in wstat.name_to_pkg_repo_config:
+        passed, log = sync_single_local_index(wstat, name)
+        all_passed.append(passed)
+        all_logs.append(log)
+
+    return all(all_passed), '\n'.join(all_logs)
+
+
+def sync_local_index_daemon(
+        pkg_repo_config_file: str,
+        admin_pkg_repo_secret_file: str,
+        index_folder: str,
+) -> int:
+    # Setup logging.
+    logging_lock_path = join(index_folder, 'sync_local_index.log.lock')
+    logging_path = join(index_folder, 'sync_local_index.log')
+
+    logging.basicConfig(level=logging.INFO, filename=logging_path)
+    logging.getLogger("filelock").setLevel(logging.WARNING)
+
+    logger_stdout = logging.getLogger('stdout')
+    lfl_stdout = LockedFileLikeObject(logging_lock_path, logger_stdout.info)
+
+    logger_stderr = logging.getLogger('stderr')
+    lfl_stderr = LockedFileLikeObject(logging_lock_path, logger_stderr.error)
+
+    with contextlib.redirect_stdout(lfl_stdout), contextlib.redirect_stderr(lfl_stderr):
+        try:
+            wstat = build_workflow_stat(
+                    pkg_repo_config_file=pkg_repo_config_file,
+                    admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+                    index_folder=index_folder,
+                    stat_folder=None,
+                    cache_folder=None,
+                    auth_read_expires=0,
+                    auth_write_expires=0,
+            )
+            name_to_sync_mtime = {name: datetime.min for name in wstat.name_to_pkg_repo_config}
+
+            while True:
+                for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
+                    delta = datetime.now() - name_to_sync_mtime[pkg_repo_config.name]
+                    if delta.total_seconds() < pkg_repo_config.local_sync_index_interval:
+                        continue
+
+                    passed, log = sync_single_local_index(wstat, pkg_repo_config.name)
+                    if passed:
+                        lfl_stdout.write(log)
+                    else:
+                        lfl_stderr.write(log)
+
+                    name_to_sync_mtime[pkg_repo_config.name] = datetime.now()
+
+                time.sleep(1.0)
+
+        except KeyboardInterrupt:
+            lfl_stdout.write('Receive KeyboardInterrupt')
+            return 0
+        except:  # pylint: disable=bare-except
+            lfl_stderr.write(traceback.format_exc())
+            return 1
+
+
+def build_workflow_stat_and_run_daemon(
+        pkg_repo_config_file: str,
+        admin_pkg_repo_secret_file: Optional[str],
+        index_folder: str,
+        stat_folder: Optional[str],
+        cache_folder: Optional[str],
+        auth_read_expires: int,
+        auth_write_expires: int,
+) -> WorkflowStat:
+    wstat = build_workflow_stat(
+            pkg_repo_config_file=pkg_repo_config_file,
+            admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+            index_folder=index_folder,
+            stat_folder=stat_folder,
+            cache_folder=cache_folder,
+            auth_read_expires=auth_read_expires,
+            auth_write_expires=auth_write_expires,
+    )
+
+    if admin_pkg_repo_secret_file:
+        pgid = os.getpgrp()
+        subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
+                [
+                        'private_pypi_sync_local_index_daemon',
+                        pkg_repo_config_file,
+                        admin_pkg_repo_secret_file,
+                        index_folder,
+                ],
+                # Share env for resolving `private_pypi_sync_local_index_daemon`.
+                env=dict(os.environ),
+                # Attach to the current process group.
+                preexec_fn=lambda: os.setpgid(0, pgid),
+                # Suppress stdout and stderr.
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
         )
 
     return wstat
@@ -453,53 +612,4 @@ def workflow_api_upload_package(
     return result.message, status_code
 
 
-def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
-    if wstat.name_to_admin_pkg_repo_secret is None:
-        return False, 'name_to_admin_pkg_repo_secret is None.'
-
-    passed = True
-    logs = []
-
-    for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
-        name = pkg_repo_config.name
-
-        pkg_repo_sercret = wstat.name_to_admin_pkg_repo_secret.get(name)
-        if pkg_repo_sercret is None:
-            logs.append(f'[WARN] secret of "{name}" is not provided, skip index sync.')
-            continue
-
-        index_lock_path, index_path = wstat.name_to_index_paths[name]
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
-        index_tmp_path = f'{index_path}.tmp.{timestamp}'
-
-        try:
-            pkg_repo = create_pkg_repo(
-                    config=pkg_repo_config,
-                    secret=pkg_repo_sercret,
-                    local_paths=wstat.local_paths,
-            )
-
-            up_to_date = False
-            if exists(index_path):
-                # Make a copy to avoid holding the lock for a long time.
-                locked_copy_file(index_lock_path, index_path, index_tmp_path, timeout=0.1)
-                # Check.
-                up_to_date = pkg_repo.local_index_is_up_to_date(index_tmp_path)
-
-            if not up_to_date:
-                # Sync.
-                result = pkg_repo.download_index(index_tmp_path)
-                if result.status != DownloadIndexStatus.SUCCEEDED:
-                    passed = False
-                    logs.append(f'[ERROR] "{name}" failed to download index:\n' + result.message)
-                    continue
-                # And replace.
-                locked_copy_file(index_lock_path, index_tmp_path, index_path, timeout=0.1)
-
-            logs.append(f'[PASS] "{name}" is up-to-date.')
-
-        except:  # pylint: disable=bare-except
-            passed = False
-            logs.append(f'[ERROR] traceback of "{name}":\n' + traceback.format_exc())
-
-    return passed, '\n'.join(logs)
+sync_local_index_daemon_cli = lambda: fire.Fire(sync_local_index_daemon)  # pylint: disable=invalid-name

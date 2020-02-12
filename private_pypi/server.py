@@ -14,7 +14,7 @@ from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
 from private_pypi.web_ui import LOGIN_HTML
 from private_pypi.workflow import (
         WorkflowStat,
-        build_workflow_stat,
+        build_workflow_stat_and_run_daemon,
         workflow_api_redirect_package_download_url,
         workflow_api_simple,
         workflow_api_simple_distrib,
@@ -281,7 +281,7 @@ Defaults to None.
 
     with app.app_context():
         # Init.
-        current_app.workflow_stat = build_workflow_stat(
+        current_app.workflow_stat = build_workflow_stat_and_run_daemon(
                 pkg_repo_config_file=config,
                 admin_pkg_repo_secret_file=admin_secret,
                 index_folder=index,
@@ -296,6 +296,14 @@ Defaults to None.
         ssl_context = (cert, pkey)
 
     if debug:
+
+        def print_response(response):
+            print(str(response.headers).strip())
+            print(response.get_data())
+            return response
+
+        app.after_request(print_response)
+
         app.run(
                 host=host,
                 port=port,
@@ -306,7 +314,6 @@ Defaults to None.
                 # https://werkzeug.palletsprojects.com/en/0.16.x/serving/#werkzeug.serving.run_simple
                 # https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https,
                 ssl_context=ssl_context,
-                debug=True,
         )
 
     else:
