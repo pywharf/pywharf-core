@@ -4,6 +4,7 @@ import os
 from os.path import isdir, join, splitext
 from typing import Optional, Tuple
 import uuid
+from urllib.parse import urljoin
 
 import fire
 from flask import Flask, current_app, redirect, request, session
@@ -42,7 +43,10 @@ SESSION_KEY_PKG_REPO_SECRET_RAW = '_private_pypi_pkg_repo_secret_raw'
 # https://github.com/maxcountryman/flask-login/blob/d4fa75305fdfb73bb55386d95bc09664bca8f902/flask_login/login_manager.py#L330-L331
 @login_manager.request_loader
 def load_user_from_request(_):
-    if request.user_agent.browser is not None:
+    # UA of pip and poetry:
+    # https://github.com/pypa/pip/blob/7420629800b10d117d3af3b668dbe99b475fcbc0/src/pip/_internal/network/session.py#L99
+    # https://github.com/python-poetry/poetry/blob/5050362f0b4c41d4637dcaa74eb2ba188bd858a9/get-poetry.py#L906
+    if 'python' not in request.user_agent.string.lower():
         # Is browser.
         pkg_repo_name = session.get(SESSION_KEY_PKG_REPO_NAME)
         pkg_repo_secret_raw = session.get(SESSION_KEY_PKG_REPO_SECRET_RAW)
@@ -135,6 +139,11 @@ def api_simple_distrib(distrib):
             pkg_repo_secret,
             distrib,
     )
+
+    if status_code == 404 and app.config['EXTRA_INDEX_URL']:
+        # Redirect to extra index if not found.
+        return redirect(urljoin(app.config['EXTRA_INDEX_URL'], distrib + '/'))
+
     return body, status_code
 
 
@@ -233,6 +242,7 @@ def run_server(
         port: int = 8888,
         auth_read_expires: int = 3600,
         auth_write_expires: int = 300,
+        extra_index_url: str = 'https://pypi.org/simple/',
         cert: Optional[str] = None,
         pkey: Optional[str] = None,
         debug: bool = False,
@@ -279,6 +289,8 @@ Defaults to None.
     os.setpgrp()
     atexit.register(stop_all_children_processes)
 
+    app.config['EXTRA_INDEX_URL'] = extra_index_url.rstrip('/') + '/'
+
     with app.app_context():
         # Init.
         current_app.workflow_stat = build_workflow_stat_and_run_daemon(
@@ -297,11 +309,21 @@ Defaults to None.
 
     if debug:
 
+        def print_request():
+            print('==== REQUEST URL ====')
+            print(request.url)
+            print('==== REQUEST HEADERS ====')
+            print(str(request.headers).strip())
+            print()
+
         def print_response(response):
+            print('==== RESPONSE HEADERS ====')
             print(str(response.headers).strip())
+            print('==== RESPONSE DATA ====')
             print(response.get_data())
             return response
 
+        app.before_request(print_request)
         app.after_request(print_response)
 
         app.run(
