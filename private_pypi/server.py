@@ -247,45 +247,6 @@ def run_server(
         port: int = 8888,
         **waitress_options: Any,
 ):
-    """Run the private-pypi server.
-
-    Args:
-        config (str): \
-Path to the package repositories config.
-        index (str): \
-Path to the index folder. \
-The folder could be empty if --admin_secret is provided.
-        admin_secret (Optional[str], optional): \
-Path to the admin secrets config with read/write permission. \
-This field is required for index synchronization on-the-fly. \
-Defaults to None.
-        stat (Optional[str], optional): \
-Path to the state folder. \
-This field is required for the upload API. \
-Defaults to None.
-        cache (Optional[str], optional): \
-Path to the cache folder for the file upload and download. \
-This field is required for the upload API and local cache feature. \
-Defaults to None.
-        auth_read_expires (int, optional): \
-The expiration time in seconds for read authentication. \
-Defaults to 3600.
-        auth_write_expires (int, optional): \
-The expiration time in seconds for read authentication. \
-Defaults to 300.
-        extra_index_url (str, optional): \
-Extra index url for redirection in case package not found. \
-If set to empty string explicitly redirection will be suppressed. \
-Defaults to 'https://pypi.org/simple/'.
-        debug (bool, optional): \
-Enable debug mode.
-        host (str, optional): \
-The interface to bind to. \
-Defaults to 'localhost'.
-        port (int, optional): \
-The port to bind to. \
-Defaults to 8080.
-"""
     # All processes in the current process group will be terminated
     # with the lead process.
     os.setpgrp()
@@ -339,7 +300,7 @@ Defaults to 8080.
 
     else:
         print(f'waitress.serve host={host}, port={port}, waitress_options={waitress_options}')
-        # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html#arguments
+        # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html
         # https://docs.pylonsproject.org/projects/waitress/en/stable/logging.html
         waitress.serve(
                 TransLogger(app),
