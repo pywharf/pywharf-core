@@ -4,6 +4,7 @@ import os
 from os.path import isdir, join, splitext
 from typing import Any, Optional, Tuple
 import uuid
+import logging
 
 import fire
 from flask import Flask, current_app, redirect, request, session
@@ -300,10 +301,15 @@ def run_server(
 
     else:
         print(f'waitress.serve host={host}, port={port}, waitress_options={waitress_options}')
-        # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html
+
+        # Setup logging.
         # https://docs.pylonsproject.org/projects/waitress/en/stable/logging.html
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger("filelock").setLevel(logging.WARNING)
+
+        # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html
         waitress.serve(
-                TransLogger(app),
+                TransLogger(app, setup_console_handler=False),
                 host=host,
                 port=port,
                 **waitress_options,
