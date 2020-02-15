@@ -15,7 +15,7 @@ POSITIONAL ARGUMENTS
         Path to the package repositories config.
     INDEX (str):
         Path to the index folder.
-        The folder could be empty if --admin_secret is provided.
+        The folder could be empty or not exists if and only if --admin_secret is provided.
 
 FLAGS
     --admin_secret (Optional[str]):
@@ -31,10 +31,10 @@ FLAGS
         This field is required for the upload API and local cache feature.
         Defaults to None.
     --auth_read_expires (int):
-        The expiration time in seconds for read authentication.
+        The expiration time (in seconds) for read authentication.
         Defaults to 3600.
     --auth_write_expires (int):
-        he expiration time in seconds for read authentication.
+        The expiration time (in seconds) for write authentication.
         Defaults to 300.
     --extra_index_url (str):
         Extra index url for redirection in case package not found.
@@ -42,6 +42,7 @@ FLAGS
         Defaults to 'https://pypi.org/simple/'.
     --debug (bool):
         Enable debug mode.
+        Defaults to False.
     --host (str):
         The interface to bind to.
         Defaults to 'localhost'.

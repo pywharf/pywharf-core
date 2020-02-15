@@ -306,10 +306,11 @@ def run_server(
         # https://docs.pylonsproject.org/projects/waitress/en/stable/logging.html
         logging.basicConfig(level=logging.INFO)
         logging.getLogger("filelock").setLevel(logging.WARNING)
+        trans_logger_wrapped_app = TransLogger(app, setup_console_handler=False)
 
         # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html
         waitress.serve(
-                TransLogger(app, setup_console_handler=False),
+                trans_logger_wrapped_app,
                 host=host,
                 port=port,
                 **waitress_options,
