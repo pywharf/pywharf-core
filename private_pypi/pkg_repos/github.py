@@ -31,6 +31,7 @@ from private_pypi.pkg_repos.pkg_repo import (
         UploadIndexResult,
         DownloadIndexStatus,
         DownloadIndexResult,
+        JobPath,
         record_error_if_raises,
 )
 from private_pypi.utils import (
@@ -117,68 +118,9 @@ class GitHubPkgRef(PkgRef):
         return parsed._replace(fragment=f'sha256={self.sha256}').geturl()
 
 
-class TaskType(Enum):
+class JobType(Enum):
     UPLOAD_PACKAGE = auto()
     DOWNLOAD_PACKAGE = auto()
-
-
-@dataclass
-class TaskPath:
-    config_name: str
-    local_path_stat: str
-    task_type_name: str
-    filename: str
-    task_id: Optional[str] = None
-
-    def _path_join_stat(self, filename: str):
-        return os.path.join(self.local_path_stat, filename)
-
-    # <task_type>-<distribution>
-    @property
-    def _task_name(self):
-        return f'{self.config_name}-{self.task_type_name}-{self.filename}'
-
-    @property
-    def lock(self):
-        return self._path_join_stat(f'{self._task_name}.lock')
-
-    # runstat: metadata of the running task like task id.
-    @property
-    def runstat_lock(self):
-        return self._path_join_stat(f'{self._task_name}.runstat.lock')
-
-    @property
-    def runstat(self):
-        return self._path_join_stat(f'{self._task_name}.runstat')
-
-    # <task_type>-<distribution>-<task_id>
-    @property
-    def _task_name_id(self):
-        assert self.task_id
-        return f'{self._task_name}-{self.task_id}'
-
-    # args: the input of task.
-    @property
-    def args(self):
-        return self._path_join_stat(f'{self._task_name_id}.args')
-
-    # logging: the logging of task.
-    @property
-    def logging_lock(self):
-        return self._path_join_stat(f'{self._task_name_id}.log.lock')
-
-    @property
-    def logging(self):
-        return self._path_join_stat(f'{self._task_name_id}.log')
-
-    # final: metadata of the final result.
-    @property
-    def finalstat_lock(self):
-        return self._path_join_stat(f'{self._task_name_id}.finalstat.lock')
-
-    @property
-    def finalstat(self):
-        return self._path_join_stat(f'{self._task_name_id}.finalstat')
 
 
 @dataclass
@@ -303,7 +245,7 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in release publishing.\n' + str(ex.data)
 
-    def upload_package_task(self, filename: str, meta: Dict[str, str], path: str):
+    def upload_package_job(self, filename: str, meta: Dict[str, str], path: str):
         ctx = UploadAndDownloadPackageContext(filename=filename, meta=meta, path=path)
 
         for action in (
@@ -320,43 +262,37 @@ class GitHubPkgRepo(PkgRepo):
 
     @record_error_if_raises
     def upload_package(self, filename: str, meta: Dict[str, str], path: str) -> UploadPackageResult:
-        if not self.local_paths.stat:
-            return UploadPackageResult(
-                    status=UploadPackageStatus.FAILED,
-                    message='stat path not set.',
-            )
-
-        task_path = TaskPath(
+        job_path = JobPath(
+                local_paths=self.local_paths,
                 config_name=self.config.name,
-                local_path_stat=self.local_paths.stat,
-                task_type_name=TaskType.UPLOAD_PACKAGE.name.lower(),
+                job_name=JobType.UPLOAD_PACKAGE.name.lower(),
                 filename=filename,
-                task_id=None,
+                job_id=None,
         )
 
-        if file_lock_is_busy(task_path.lock):
+        if file_lock_is_busy(job_path.lock):
             runstat_status, runstat = locked_read_toml(
-                    task_path.runstat_lock,
-                    task_path.runstat,
+                    job_path.runstat_lock,
+                    job_path.runstat,
                     timeout=LOCK_TIMEOUT,
             )
             if runstat_status and runstat is not None:
-                message = 'upload task is running.'
-                task_id = runstat['task_id']
+                message = 'upload job is running.'
+                job_id = runstat['job_id']
             else:
-                message = 'upload task is running but cannot get task_id, please try later.'
-                task_id = None
+                message = 'upload job is running but cannot get job_id, please try later.'
+                job_id = None
 
             return UploadPackageResult(
-                    status=UploadPackageStatus.TASK_CREATED,
+                    status=UploadPackageStatus.JOB_CREATED,
                     message=message,
-                    task_id=task_id,
+                    job_id=job_id,
             )
 
         if self.config.large_package_bytes <= 0 \
                 or os.path.getsize(path) < self.config.large_package_bytes:
             # Small package, or the background upload feature is disabled.
-            ctx = self.upload_package_task(filename, meta, path)
+            ctx = self.upload_package_job(filename, meta, path)
             status = UploadPackageStatus.SUCCEEDED if not ctx.failed else UploadPackageStatus.FAILED
             return UploadPackageResult(
                     status=status,
@@ -365,29 +301,33 @@ class GitHubPkgRepo(PkgRepo):
 
         else:
             # Large package, upload in background.
-            task_id = shortuuid.ShortUUID().random(length=6)
-            task_path.task_id = task_id
+            job_id = shortuuid.ShortUUID().random(length=6)
+            job_path.job_id = job_id
 
             # TODO: dataclass.
-            task_dict = {
+            job_dict = {
                     'filename': filename,
                     'meta': meta,
                     'path': path,
-                    'task_id': task_id,
-                    'task_created_time': datetime.now(),
+                    'job_id': job_id,
+                    'job_created_time': datetime.now(),
             }
 
+            # TODO: This is bad design.
+            job_path_dict = asdict(job_path)
+            job_path_dict.pop('local_paths')
+
             write_toml(
-                    task_path.args,
+                    job_path.args,
                     {
                             'repo_dict': asdict(self),
-                            'task_dict': task_dict,
-                            'task_path_dict': asdict(task_path),
+                            'job_dict': job_dict,
+                            'job_path_dict': job_path_dict,
                     },
             )
             pgid = os.getpgrp()
             subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-                    ['private_pypi_github_upload_package', task_path.args, '--remove_args_path'],
+                    ['private_pypi_github_upload_package', job_path.args],
                     # Share env for resolving `private_pypi_github_upload_package`.
                     env=dict(os.environ),
                     # Attach to the current process group.
@@ -398,49 +338,44 @@ class GitHubPkgRepo(PkgRepo):
             )
 
             return UploadPackageResult(
-                    status=UploadPackageStatus.TASK_CREATED,
-                    task_id=task_id,
-                    message=f'Upload task created with task_id={task_id}',
+                    status=UploadPackageStatus.JOB_CREATED,
+                    job_id=job_id,
+                    message=f'Upload job created with job_id={job_id}',
             )
 
     @record_error_if_raises
-    def view_task_upload_package(self, filename: str, task_id: str) -> UploadPackageResult:
-        task_path = TaskPath(
+    def view_job_upload_package(self, filename: str, job_id: str) -> UploadPackageResult:
+        job_path = JobPath(
+                local_paths=self.local_paths,
                 config_name=self.config.name,
-                local_path_stat=self.local_paths.stat or '',
-                task_type_name=TaskType.UPLOAD_PACKAGE.name.lower(),
+                job_name=JobType.UPLOAD_PACKAGE.name.lower(),
                 filename=filename,
-                task_id=task_id,
+                job_id=job_id,
         )
 
-        if not self.local_paths.stat:
-            task_path = None
-            status = UploadPackageStatus.FAILED
-            message = 'stat path not set.'
-
-        elif file_lock_is_busy(task_path.lock):
+        if file_lock_is_busy(job_path.lock):
             logging_message_status, logging_message = locked_read_file(
-                    task_path.logging_lock,
-                    task_path.logging,
+                    job_path.logging_lock,
+                    job_path.logging,
                     timeout=LOCK_TIMEOUT,
             )
 
             if logging_message_status:
                 if logging_message is None:
                     status = UploadPackageStatus.FAILED
-                    message = 'Task is running but cannot find the log.'
+                    message = 'Job is running but cannot find the log.'
                 else:
-                    status = UploadPackageStatus.TASK_CREATED
+                    status = UploadPackageStatus.JOB_CREATED
                     message = logging_message
 
             else:
-                status = UploadPackageStatus.TASK_CREATED
+                status = UploadPackageStatus.JOB_CREATED
                 message = 'Busy lock, try later.'
 
         else:
             finalstat_status, finalstat = locked_read_toml(
-                    task_path.finalstat_lock,
-                    task_path.finalstat,
+                    job_path.finalstat_lock,
+                    job_path.finalstat,
                     timeout=LOCK_TIMEOUT,
             )
             if finalstat_status:
@@ -450,30 +385,30 @@ class GitHubPkgRepo(PkgRepo):
                             if not finalstat['failed'] else UploadPackageStatus.FAILED
                     message = finalstat['logging_message']
 
-                elif not os.path.exists(task_path.args):
+                elif not os.path.exists(job_path.args):
                     # No final state and no args file.
                     status = UploadPackageStatus.FAILED
                     message = 'Args file not found. Please help report this bug.'
 
                 else:
-                    # No final state, check the task created time.
-                    args = read_toml(task_path.args)
-                    delta = datetime.now() - args['task_dict']['task_created_time']
+                    # No final state, check the job created time.
+                    args = read_toml(job_path.args)
+                    delta = datetime.now() - args['job_dict']['job_created_time']
                     if delta.total_seconds() < 10:
-                        status = UploadPackageStatus.TASK_CREATED
-                        message = 'Task was just created and is not runnng.'
+                        status = UploadPackageStatus.JOB_CREATED
+                        message = 'Job was just created and is not runnng.'
 
                     else:
                         status = UploadPackageStatus.FAILED
-                        message = ('Task is not runnng'
-                                   f'incorrect (filename={filename}, task_id={task_id}).')
+                        message = ('Job is not runnng '
+                                   f'incorrect (filename={filename}, job_id={job_id}).')
 
             else:
                 # Corrupted lock.
                 status = UploadPackageStatus.FAILED
                 message = 'Lock corrupted (lock not busy, finalstat_lock busy). Please help report this bug.'
 
-        return UploadPackageResult(status=status, task_id=task_id, message=message)
+        return UploadPackageResult(status=status, job_id=job_id, message=message)
 
     def _get_published_release(self, ctx: UploadAndDownloadPackageContext):
         try:
@@ -507,7 +442,7 @@ class GitHubPkgRepo(PkgRepo):
         raise NotImplementedError()
 
     @record_error_if_raises
-    def view_task_download_package(self, filename: str, task_id: str):
+    def view_job_download_package(self, filename: str, job_id: str):
         raise NotImplementedError()
 
     @record_error_if_raises
@@ -636,31 +571,27 @@ class GitHubPkgRepo(PkgRepo):
             return DownloadIndexResult(status=DownloadIndexStatus.FAILED, message=error_message)
 
 
-def github_upload_package(args_path: str, remove_args_path: bool = False):
+def github_upload_package(args_path: str):
     args = read_toml(args_path)
 
-    if remove_args_path:
-        try:
-            os.remove(args_path)
-        except IOError:
-            pass
+    repo_dict = args['repo_dict']
+    job_dict = args['job_dict']
 
-    task_path = TaskPath(**args['task_path_dict'])
+    local_paths = LocalPaths(**repo_dict['local_paths'])
+
+    job_path = JobPath(local_paths=local_paths, **args['job_path_dict'])
 
     # Setup logging.
-    logging.basicConfig(level=logging.INFO, filename=task_path.logging)
+    logging.basicConfig(level=logging.INFO, filename=job_path.logging)
     logging.getLogger("filelock").setLevel(logging.WARNING)
 
     logger_stdout = logging.getLogger('stdout')
-    lfl_stdout = LockedFileLikeObject(task_path.logging_lock, logger_stdout.info)
+    lfl_stdout = LockedFileLikeObject(job_path.logging_lock, logger_stdout.info)
 
     logger_stderr = logging.getLogger('stderr')
-    lfl_stderr = LockedFileLikeObject(task_path.logging_lock, logger_stderr.error)
+    lfl_stderr = LockedFileLikeObject(job_path.logging_lock, logger_stderr.error)
 
-    repo_dict = args['repo_dict']
-    task_dict = args['task_dict']
-
-    flock = FileLock(task_path.lock)
+    flock = FileLock(job_path.lock)
     flock.acquire()
 
     failed = False
@@ -670,30 +601,30 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
             repo = GitHubPkgRepo(
                     config=GitHubConfig(**repo_dict['config']),
                     secret=GitHubAuthToken(**repo_dict['secret']),
-                    local_paths=LocalPaths(**repo_dict['local_paths']),
+                    local_paths=local_paths,
             )
 
             if not locked_write_toml(
-                    task_path.runstat_lock,
-                    task_path.runstat,
-                    task_dict,
+                    job_path.runstat_lock,
+                    job_path.runstat,
+                    job_dict,
                     timeout=LOCK_TIMEOUT,
             ):
                 logger_stderr.error('blocked for writing to runstat.')
                 return 1
 
-            lfl_stdout.write('Task={} created'.format(task_dict['task_id']))
+            lfl_stdout.write('Job={} created'.format(job_dict['job_id']))
 
-            ctx = repo.upload_package_task(
-                    task_dict['filename'],
-                    task_dict['meta'],
-                    task_dict['path'],
+            ctx = repo.upload_package_job(
+                    job_dict['filename'],
+                    job_dict['meta'],
+                    job_dict['path'],
             )
             failed = ctx.failed
 
-            lfl_stdout.write('Task failed: {}'.format(ctx.failed))
-            lfl_stdout.write('Task message: {}'.format(ctx.message))
-            lfl_stdout.write('Task={} finished'.format(task_dict['task_id']))
+            lfl_stdout.write('Job failed: {}'.format(ctx.failed))
+            lfl_stdout.write('Job message: {}'.format(ctx.message))
+            lfl_stdout.write('Job={} finished'.format(job_dict['job_id']))
 
     except:  # pylint: disable=bare-except
         lfl_stderr.write(traceback.format_exc())
@@ -702,15 +633,15 @@ def github_upload_package(args_path: str, remove_args_path: bool = False):
 
     finally:
         _, logging_message = locked_read_file(
-                task_path.logging_lock,
-                task_path.logging,
+                job_path.logging_lock,
+                job_path.logging,
         )
         if logging_message is None:
             logging_message = 'logging file not exits.'
 
         locked_write_toml(
-                task_path.finalstat_lock,
-                task_path.finalstat,
+                job_path.finalstat_lock,
+                job_path.finalstat,
                 {
                         'failed': failed,
                         'logging_message': logging_message,

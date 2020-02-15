@@ -1,7 +1,7 @@
 from dataclasses import asdict
 import os
 import os.path
-from datetime import date, datetime
+from datetime import datetime
 import tempfile
 
 import pytest
@@ -95,7 +95,10 @@ def create_github_pkg_repo_for_test(name):
             config=GitHubConfig(name=name, owner=owner, repo=repo, large_package_bytes=512),
             secret=GitHubAuthToken(name=name, raw=token),
             local_paths=LocalPaths(
-                    stat=str(tempfile.mkdtemp()),
+                    index=str(tempfile.mkdtemp()),
+                    log=str(tempfile.mkdtemp()),
+                    lock=str(tempfile.mkdtemp()),
+                    job=str(tempfile.mkdtemp()),
                     cache=str(tempfile.mkdtemp()),
             ),
     )
@@ -124,7 +127,10 @@ def preset_github_pkg_repo():
             config=pkg_repo_configs['preset_github_test'],
             secret=create_github_auth_token(),
             local_paths=LocalPaths(
-                    stat=str(tempfile.mkdtemp()),
+                    index=str(tempfile.mkdtemp()),
+                    log=str(tempfile.mkdtemp()),
+                    lock=str(tempfile.mkdtemp()),
+                    job=str(tempfile.mkdtemp()),
                     cache=str(tempfile.mkdtemp()),
             ),
     )
@@ -134,14 +140,13 @@ def preset_github_pkg_repo():
 def preset_workflow_args():
     args = {
             'pkg_repo_config_file': 'tests/fixtures/preset_config.toml',
-            'index_folder': tempfile.mkdtemp(),
-            'stat_folder': tempfile.mkdtemp(),
-            'cache_folder': tempfile.mkdtemp(),
+            'root_folder': tempfile.mkdtemp(),
             'admin_pkg_repo_secret_file': None,
     }
     preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
+    os.mkdir(os.path.join(args['root_folder'], 'index'))
     write_toml(
-            os.path.join(args['index_folder'], 'preset_github_test.index'),
+            os.path.join(args['root_folder'], 'index/preset_github_test.index'),
             preset_github_test_index,
     )
     yield args
@@ -156,9 +161,7 @@ def preset_workflow_with_admin_secret_args():
 
     args = {
             'pkg_repo_config_file': 'tests/fixtures/preset_config.toml',
-            'index_folder': tempfile.mkdtemp(),
-            'stat_folder': tempfile.mkdtemp(),
-            'cache_folder': tempfile.mkdtemp(),
+            'root_folder': tempfile.mkdtemp(),
             'admin_pkg_repo_secret_file': admin_pkg_repo_secret_file,
     }
     yield args

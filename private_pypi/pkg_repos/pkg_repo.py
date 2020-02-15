@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
+import os.path
 import functools
 import traceback
 from typing import Dict, List, Optional, Tuple, TypeVar
@@ -42,21 +43,24 @@ class PkgRef:
 
 @dataclass
 class LocalPaths:
-    stat: Optional[str] = None
-    cache: Optional[str] = None
+    index: str
+    log: str
+    lock: str
+    job: str
+    cache: str
 
 
 class UploadPackageStatus(Enum):
     SUCCEEDED = auto()
     FAILED = auto()
-    TASK_CREATED = auto()
+    JOB_CREATED = auto()
 
 
 @dataclass
 class UploadPackageResult:
     status: UploadPackageStatus
     message: str = ''
-    task_id: Optional[str] = None
+    job_id: Optional[str] = None
 
 
 class DownloadPackageStatus(Enum):
@@ -121,7 +125,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def view_task_upload_package(self, filename: str, task_id: str) -> UploadPackageResult:
+    def view_job_upload_package(self, filename: str, job_id: str) -> UploadPackageResult:
         pass
 
     @abstractmethod
@@ -129,7 +133,7 @@ class PkgRepo:
         pass
 
     @abstractmethod
-    def view_task_download_package(self, filename: str, task_id: str) -> DownloadPackageResult:
+    def view_job_download_package(self, filename: str, job_id: str) -> DownloadPackageResult:
         pass
 
     @abstractmethod
@@ -151,6 +155,74 @@ class PkgRepo:
     @abstractmethod
     def download_index(self, path: str) -> DownloadIndexResult:
         pass
+
+
+@dataclass
+class JobPath:
+    local_paths: LocalPaths
+    config_name: str
+    job_name: str
+    filename: str
+    job_id: Optional[str] = None
+
+    def _path_join_log(self, filename: str):
+        return os.path.join(self.local_paths.log, filename)
+
+    def _path_join_lock(self, filename: str):
+        return os.path.join(self.local_paths.lock, filename)
+
+    def _path_join_job(self, filename: str):
+        return os.path.join(self.local_paths.job, filename)
+
+    def _path_join_cache(self, filename: str):
+        return os.path.join(self.local_paths.cache, filename)
+
+    # <job_type>-<distribution>
+    @property
+    def _job_name(self):
+        return f'{self.config_name}-{self.job_name}-{self.filename}'
+
+    @property
+    def lock(self):
+        return self._path_join_lock(f'{self._job_name}.lock')
+
+    # runstat: metadata of the running job like job id.
+    @property
+    def runstat_lock(self):
+        return self._path_join_lock(f'{self._job_name}.runstat.lock')
+
+    @property
+    def runstat(self):
+        return self._path_join_job(f'{self._job_name}.runstat')
+
+    # <job_type>-<distribution>-<job_id>
+    @property
+    def _job_name_id(self):
+        assert self.job_id
+        return f'{self._job_name}-{self.job_id}'
+
+    # args: the input of job.
+    @property
+    def args(self):
+        return self._path_join_job(f'{self._job_name_id}.args')
+
+    # logging: the logging of job.
+    @property
+    def logging_lock(self):
+        return self._path_join_lock(f'{self._job_name_id}.log.lock')
+
+    @property
+    def logging(self):
+        return self._path_join_log(f'{self._job_name_id}.log')
+
+    # final: metadata of the final result.
+    @property
+    def finalstat_lock(self):
+        return self._path_join_lock(f'{self._job_name_id}.finalstat.lock')
+
+    @property
+    def finalstat(self):
+        return self._path_join_job(f'{self._job_name_id}.finalstat')
 
 
 METHOD = TypeVar('METHOD')

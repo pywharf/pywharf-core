@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 import os
-from os.path import exists, getmtime, getsize, isdir, join
+from os.path import exists, getmtime, getsize, join
 import subprocess
 import threading
 import time
@@ -85,9 +85,7 @@ class WorkflowStat:
 def build_workflow_stat(
         pkg_repo_config_file: str,
         admin_pkg_repo_secret_file: Optional[str],
-        index_folder: str,
-        stat_folder: Optional[str],
-        cache_folder: Optional[str],
+        root_folder: str,
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
@@ -102,20 +100,28 @@ def build_workflow_stat(
     if admin_pkg_repo_secret_file is not None:
         name_to_admin_pkg_repo_secret = load_pkg_repo_secrets(admin_pkg_repo_secret_file)
 
-    # Index.
-    if not isdir(index_folder):
-        raise FileNotFoundError(f'--index={index_folder} path invalid.')
+    # Folders.
+    local_paths = LocalPaths(
+            index=join(root_folder, 'index'),
+            log=join(root_folder, 'log'),
+            lock=join(root_folder, 'lock'),
+            job=join(root_folder, 'job'),
+            cache=join(root_folder, 'cache'),
+    )
+    # Create if not exists.
+    os.makedirs(local_paths.index, exist_ok=True)
+    os.makedirs(local_paths.log, exist_ok=True)
+    os.makedirs(local_paths.lock, exist_ok=True)
+    os.makedirs(local_paths.job, exist_ok=True)
+    os.makedirs(local_paths.cache, exist_ok=True)
 
     # Index paths of (index_lock, index).
     name_to_index_paths = {}
     for pkg_repo_config in name_to_pkg_repo_config.values():
         name_to_index_paths[pkg_repo_config.name] = (
-                join(index_folder, f'{pkg_repo_config.name}.index.lock'),
-                join(index_folder, f'{pkg_repo_config.name}.index'),
+                join(local_paths.lock, f'{pkg_repo_config.name}.index.lock'),
+                join(local_paths.index, f'{pkg_repo_config.name}.index'),
         )
-
-    # Paths for repositories.
-    local_paths = LocalPaths(stat=stat_folder, cache=cache_folder)
 
     # Build WorkflowStat.
     wstat = WorkflowStat(
@@ -217,11 +223,11 @@ def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
 def sync_local_index_daemon(
         pkg_repo_config_file: str,
         admin_pkg_repo_secret_file: str,
-        index_folder: str,
+        root_folder: str,
 ) -> int:
     # Setup logging.
-    logging_lock_path = join(index_folder, 'sync_local_index.log.lock')
-    logging_path = join(index_folder, 'sync_local_index.log')
+    logging_lock_path = join(root_folder, 'lock/private_pypi_sync_local_index.log.lock')
+    logging_path = join(root_folder, 'log/private_pypi_sync_local_index.log')
 
     logging.basicConfig(level=logging.INFO, filename=logging_path)
     logging.getLogger("filelock").setLevel(logging.WARNING)
@@ -233,20 +239,18 @@ def sync_local_index_daemon(
     lfl_stderr = LockedFileLikeObject(logging_lock_path, logger_stderr.error)
 
     with contextlib.redirect_stdout(lfl_stdout), contextlib.redirect_stderr(lfl_stderr):
-        try:
-            wstat = build_workflow_stat(
-                    pkg_repo_config_file=pkg_repo_config_file,
-                    admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-                    index_folder=index_folder,
-                    stat_folder=None,
-                    cache_folder=None,
-                    auth_read_expires=0,
-                    auth_write_expires=0,
-            )
-            name_to_sync_mtime = {name: datetime.min for name in wstat.name_to_pkg_repo_config}
+        wstat = build_workflow_stat(
+                pkg_repo_config_file=pkg_repo_config_file,
+                admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+                root_folder=root_folder,
+                auth_read_expires=0,
+                auth_write_expires=0,
+        )
+        name_to_sync_mtime = {name: datetime.min for name in wstat.name_to_pkg_repo_config}
 
-            while True:
-                for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
+        while True:
+            for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
+                try:
                     delta = datetime.now() - name_to_sync_mtime[pkg_repo_config.name]
                     if delta.total_seconds() < pkg_repo_config.local_sync_index_interval:
                         continue
@@ -259,31 +263,23 @@ def sync_local_index_daemon(
 
                     name_to_sync_mtime[pkg_repo_config.name] = datetime.now()
 
-                time.sleep(1.0)
+                except:  # pylint: disable=bare-except
+                    lfl_stderr.write(traceback.format_exc())
 
-        except KeyboardInterrupt:
-            lfl_stdout.write('Receive KeyboardInterrupt')
-            return 0
-        except:  # pylint: disable=bare-except
-            lfl_stderr.write(traceback.format_exc())
-            return 1
+            time.sleep(1.0)
 
 
 def build_workflow_stat_and_run_daemon(
         pkg_repo_config_file: str,
         admin_pkg_repo_secret_file: Optional[str],
-        index_folder: str,
-        stat_folder: Optional[str],
-        cache_folder: Optional[str],
+        root_folder: str,
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
     wstat = build_workflow_stat(
             pkg_repo_config_file=pkg_repo_config_file,
             admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-            index_folder=index_folder,
-            stat_folder=stat_folder,
-            cache_folder=cache_folder,
+            root_folder=root_folder,
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
     )
@@ -295,7 +291,7 @@ def build_workflow_stat_and_run_daemon(
                         'private_pypi_sync_local_index_daemon',
                         pkg_repo_config_file,
                         admin_pkg_repo_secret_file,
-                        index_folder,
+                        root_folder,
                 ],
                 # Share env for resolving `private_pypi_sync_local_index_daemon`.
                 env=dict(os.environ),
@@ -602,7 +598,7 @@ def workflow_api_upload_package(
     result = pkg_repo.upload_package(filename, meta, path)
     if result.status == UploadPackageStatus.FAILED:
         status_code = 401
-    elif result.status == UploadPackageStatus.TASK_CREATED:
+    elif result.status == UploadPackageStatus.JOB_CREATED:
         status_code = 201
     elif result.status == UploadPackageStatus.SUCCEEDED:
         status_code = 200

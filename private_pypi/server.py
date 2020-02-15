@@ -1,7 +1,7 @@
 import atexit
 from dataclasses import dataclass
 import os
-from os.path import isdir, join, splitext
+from os.path import join, splitext
 from typing import Any, Optional, Tuple
 import uuid
 import logging
@@ -182,16 +182,6 @@ def api_redirect_package_download_url(distrib, filename):
 @login_required
 def api_upload_package():  # pylint: disable=too-many-return-statements
     cache_folder = current_app.workflow_stat.local_paths.cache
-    if not cache_folder:
-        return 'Cache folder --cache not set.', 405
-    if not isdir(cache_folder):
-        return f'Cache folder --cache={cache_folder} path invalid.', 405
-
-    stat_folder = current_app.workflow_stat.local_paths.stat
-    if not stat_folder:
-        return 'State folder --stat not set.', 405
-    if not isdir(stat_folder):
-        return f'State folder --stat={stat_folder} path invalid.', 405
 
     pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
     if pkg_repo_secret is None:
@@ -236,10 +226,8 @@ def stop_all_children_processes():
 
 def run_server(
         config: str,
-        index: str,
+        root: str,
         admin_secret: Optional[str] = None,
-        stat: Optional[str] = None,
-        cache: Optional[str] = None,
         auth_read_expires: int = 3600,
         auth_write_expires: int = 300,
         extra_index_url: str = 'https://pypi.org/simple/',
@@ -262,12 +250,19 @@ def run_server(
         current_app.workflow_stat = build_workflow_stat_and_run_daemon(
                 pkg_repo_config_file=config,
                 admin_pkg_repo_secret_file=admin_secret,
-                index_folder=index,
-                stat_folder=stat,
-                cache_folder=cache,
+                root_folder=root,
                 auth_read_expires=auth_read_expires,
                 auth_write_expires=auth_write_expires,
         )
+        server_logging_path = join(
+                current_app.workflow_stat.local_paths.log,
+                'private_pypi_server.log',
+        )
+
+    # Setup logging.
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("filelock").setLevel(logging.WARNING)
+    logging.getLogger().addHandler(logging.FileHandler(server_logging_path))
 
     if debug:
         if waitress_options:
@@ -302,10 +297,7 @@ def run_server(
     else:
         print(f'waitress.serve host={host}, port={port}, waitress_options={waitress_options}')
 
-        # Setup logging.
         # https://docs.pylonsproject.org/projects/waitress/en/stable/logging.html
-        logging.basicConfig(level=logging.INFO)
-        logging.getLogger("filelock").setLevel(logging.WARNING)
         trans_logger_wrapped_app = TransLogger(app, setup_console_handler=False)
 
         # https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html

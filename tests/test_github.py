@@ -26,13 +26,13 @@ def test_upload_large_package(dirty_github_pkg_repo, tmp_path):
             {'name': 'large'},
             create_random_file(str(tmp_path / 'large-1.0-py3-none-any.whl'), 1024),
     )
-    assert result.status == UploadPackageStatus.TASK_CREATED
+    assert result.status == UploadPackageStatus.JOB_CREATED
 
-    task_id = result.task_id
-    assert task_id
+    job_id = result.job_id
+    assert job_id
 
     while True:
-        result = repo.view_task_upload_package('large-1.0-py3-none-any.whl', task_id)
+        result = repo.view_job_upload_package('large-1.0-py3-none-any.whl', job_id)
         assert result.status != UploadPackageStatus.FAILED
         if result.status == UploadPackageStatus.SUCCEEDED:
             break

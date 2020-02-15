@@ -8,27 +8,18 @@
 Run the private-pypi server.
 
 SYNOPSIS
-    private_pypi_run_server CONFIG INDEX <flags>
+    private_pypi_run_server CONFIG ROOT <flags>
 
 POSITIONAL ARGUMENTS
     CONFIG (str):
         Path to the package repositories config.
-    INDEX (str):
-        Path to the index folder.
-        The folder could be empty or not exists if and only if --admin_secret is provided.
+    ROOT (str):
+        Path to the root folder.
 
 FLAGS
     --admin_secret (Optional[str]):
         Path to the admin secrets config with read/write permission.
         This field is required for local index synchronization.
-        Defaults to None.
-    --stat (Optional[str]):
-        Path to the state folder.
-        This field is required for the upload API.
-        Defaults to None.
-    --cache (Optional[str]):
-        Path to the cache folder for file upload and download.
-        This field is required for the upload API and local cache feature.
         Defaults to None.
     --auth_read_expires (int):
         The expiration time (in seconds) for read authentication.
