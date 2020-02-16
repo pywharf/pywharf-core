@@ -119,7 +119,7 @@ LOGIN_HTML = '''
   <div id="container-login">
     <div id="title">
       <i class="material-icons lock">lock</i> Login </div>
-    <form action='/browser_login/' method='POST'>
+    <form action='/login/' method='POST'>
       <div class="input">
         <div class="input-addon">
           <i class="material-icons">face</i>

@@ -29,7 +29,7 @@ app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'
 
 login_manager = LoginManager()  # pylint: disable=invalid-name
 login_manager.init_app(app)
-login_manager.login_view = 'browser_login'
+login_manager.login_view = 'login'
 
 
 @dataclass
@@ -67,8 +67,8 @@ def load_user_from_request(_):
         return MockUser(pkg_repo_name=username, pkg_repo_secret_raw=password)
 
 
-@app.route("/browser_login/", methods=["GET", "POST"])
-def browser_login():
+@app.route("/login/", methods=["GET", "POST"])
+def login():
     if request.method == 'GET':
         return LOGIN_HTML
 
@@ -84,11 +84,11 @@ def browser_login():
     return redirect(request.args.get("next") or '/simple/')
 
 
-@app.route("/browser_logout/", methods=["GET"])
-def browser_logout():
+@app.route("/logout/", methods=["GET"])
+def logout():
     session[SESSION_KEY_PKG_REPO_NAME] = None
     session[SESSION_KEY_PKG_REPO_SECRET_RAW] = None
-    return redirect('/browser_login/')
+    return redirect('/login/')
 
 
 def load_name_from_request() -> str:

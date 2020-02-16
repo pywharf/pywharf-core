@@ -4,4 +4,3 @@ owner = "private-pypi-test"
 repo = "private-pypi-test-20200210012256551389"
 branch = "master"
 index_filename = "index.toml"
-large_package_bytes = 512

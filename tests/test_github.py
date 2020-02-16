@@ -19,27 +19,6 @@ def test_upload_small_package(dirty_github_pkg_repo, tmp_path):
     assert result.status == UploadPackageStatus.SUCCEEDED
 
 
-def test_upload_large_package(dirty_github_pkg_repo, tmp_path):
-    repo: GitHubPkgRepo = dirty_github_pkg_repo
-    result = repo.upload_package(
-            'large-1.0-py3-none-any.whl',
-            {'name': 'large'},
-            create_random_file(str(tmp_path / 'large-1.0-py3-none-any.whl'), 1024),
-    )
-    assert result.status == UploadPackageStatus.JOB_CREATED
-
-    job_id = result.job_id
-    assert job_id
-
-    while True:
-        result = repo.view_job_upload_package('large-1.0-py3-none-any.whl', job_id)
-        assert result.status != UploadPackageStatus.FAILED
-        if result.status == UploadPackageStatus.SUCCEEDED:
-            break
-        time.sleep(0.1)
-        continue
-
-
 def test_upload_and_download_index_file(empty_github_pkg_repo, tmp_path):
     repo: GitHubPkgRepo = empty_github_pkg_repo
 

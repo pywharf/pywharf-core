@@ -35,10 +35,9 @@ yapf = "^0.29.0"
 pylint = "^2.4.4"
 
 [tool.poetry.scripts]
-private_pypi_run_server = "private_pypi.server:run_server_cli"
+private_pypi_server = "private_pypi.server:run_server_cli"
 private_pypi_sync_local_index_daemon = "private_pypi.workflow:sync_local_index_daemon_cli"
 private_pypi_github_create_package_repo = "private_pypi.pkg_repos.github:github_create_package_repo_cli"
-private_pypi_github_upload_package = "private_pypi.pkg_repos.github:github_upload_package_cli"
 
 [build-system]
 requires = ["poetry>=0.12"]

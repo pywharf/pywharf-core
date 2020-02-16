@@ -2,13 +2,13 @@
 
 ## CLI
 
-`private_pypi_run_server`:
+`private_pypi_server`:
 
 ```txt
 Run the private-pypi server.
 
 SYNOPSIS
-    private_pypi_run_server CONFIG ROOT <flags>
+    private_pypi_server CONFIG ROOT <flags>
 
 POSITIONAL ARGUMENTS
     CONFIG (str):

@@ -92,7 +92,7 @@ def setup_test_github_repo():
 def create_github_pkg_repo_for_test(name):
     owner, repo, token = setup_test_github_repo()
     return GitHubPkgRepo(
-            config=GitHubConfig(name=name, owner=owner, repo=repo, large_package_bytes=512),
+            config=GitHubConfig(name=name, owner=owner, repo=repo),
             secret=GitHubAuthToken(name=name, raw=token),
             local_paths=LocalPaths(
                     index=str(tempfile.mkdtemp()),

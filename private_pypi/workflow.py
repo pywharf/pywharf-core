@@ -252,7 +252,7 @@ def sync_local_index_daemon(
             for pkg_repo_config in wstat.name_to_pkg_repo_config.values():
                 try:
                     delta = datetime.now() - name_to_sync_mtime[pkg_repo_config.name]
-                    if delta.total_seconds() < pkg_repo_config.local_sync_index_interval:
+                    if delta.total_seconds() < pkg_repo_config.sync_index_interval:
                         continue
 
                     passed, log = sync_single_local_index(wstat, pkg_repo_config.name)
@@ -598,8 +598,6 @@ def workflow_api_upload_package(
     result = pkg_repo.upload_package(filename, meta, path)
     if result.status == UploadPackageStatus.FAILED:
         status_code = 401
-    elif result.status == UploadPackageStatus.JOB_CREATED:
-        status_code = 201
     elif result.status == UploadPackageStatus.SUCCEEDED:
         status_code = 200
     else:
