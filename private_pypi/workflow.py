@@ -15,19 +15,16 @@ from filelock import FileLock
 import fire
 from jinja2 import Template
 
-from private_pypi.pkg_repos import (
+from private_pypi.backends.backend import (
         DownloadIndexStatus,
         LocalPaths,
         PkgRef,
         PkgRepo,
         PkgRepoConfig,
-        PkgRepoIndex,
         PkgRepoSecret,
+        PkgRepoIndex,
         UploadPackageStatus,
-        create_pkg_repo,
-        load_pkg_repo_configs,
-        load_pkg_repo_index,
-        load_pkg_repo_secrets,
+        BackendInstanceManager,
 )
 from private_pypi.utils import LockedFileLikeObject, locked_copy_file
 
@@ -57,6 +54,9 @@ def get_mtime_size(path: str) -> Tuple[datetime, int]:
 
 @dataclass
 class WorkflowStat:
+    # Backend reflection.
+    backend_instance_manager: BackendInstanceManager
+
     # Package repository configs.
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
 
@@ -89,16 +89,19 @@ def build_workflow_stat(
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
+    backend_instance_manager = BackendInstanceManager()
+
     # Config.
     if not exists(pkg_repo_config_file):
         raise FileNotFoundError(f'pkg_repo_config_file={pkg_repo_config_file} not exists.')
 
-    name_to_pkg_repo_config = load_pkg_repo_configs(pkg_repo_config_file)
+    name_to_pkg_repo_config = backend_instance_manager.load_pkg_repo_configs(pkg_repo_config_file)
 
     # Admin secret.
     name_to_admin_pkg_repo_secret = None
     if admin_pkg_repo_secret_file is not None:
-        name_to_admin_pkg_repo_secret = load_pkg_repo_secrets(admin_pkg_repo_secret_file)
+        name_to_admin_pkg_repo_secret = \
+                backend_instance_manager.load_pkg_repo_secrets(admin_pkg_repo_secret_file)
 
     # Folders.
     local_paths = LocalPaths(
@@ -125,6 +128,7 @@ def build_workflow_stat(
 
     # Build WorkflowStat.
     wstat = WorkflowStat(
+            backend_instance_manager=backend_instance_manager,
             name_to_pkg_repo_config=name_to_pkg_repo_config,
             name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
             name_to_index_paths=name_to_index_paths,
@@ -153,10 +157,8 @@ def build_workflow_stat(
                     f'index file={index_path} for name={pkg_repo_config.name} not exists')
 
         wstat.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
-        wstat.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
-                index_path,
-                pkg_repo_config.type,
-        )
+        wstat.name_to_pkg_repo_index[pkg_repo_config.name] = \
+                PkgRepoIndex(wstat.backend_instance_manager.load_pkg_refs(index_path))
 
     return wstat
 
@@ -173,7 +175,8 @@ def sync_single_local_index(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
     index_tmp_path = f'{index_path}.tmp.{timestamp}'
 
     try:
-        pkg_repo = create_pkg_repo(
+        pkg_repo = wstat.backend_instance_manager.create_pkg_repo(
+                type=pkg_repo_config.type,
                 config=pkg_repo_config,
                 secret=pkg_repo_sercret,
                 local_paths=wstat.local_paths,
@@ -379,7 +382,8 @@ def pkg_repo_secret_is_authenticated(
                 check_auth_read,
         ):
             # Initialize.
-            pkg_repo = create_pkg_repo(
+            pkg_repo = wstat.backend_instance_manager.create_pkg_repo(
+                    type=pkg_repo_config.type,
                     config=pkg_repo_config,
                     secret=pkg_repo_secret,
                     local_paths=wstat.local_paths,
@@ -416,10 +420,8 @@ def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool
 
             if cur_mtime_size != last_mtime_size:
                 # Index has been updated, reload.
-                wstat.name_to_pkg_repo_index[pkg_repo_config.name] = load_pkg_repo_index(
-                        index_path,
-                        pkg_repo_config.type,
-                )
+                wstat.name_to_pkg_repo_index[pkg_repo_config.name] = \
+                        PkgRepoIndex(wstat.backend_instance_manager.load_pkg_refs(index_path))
 
     except:  # pylint: disable=bare-except
         return False, traceback.format_exc()

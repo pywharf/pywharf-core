@@ -13,8 +13,7 @@ import psutil
 import waitress
 from paste.translogger import TransLogger
 
-from private_pypi.pkg_repos import PkgRepoSecret, create_pkg_repo_secret
-from private_pypi.web_ui import LOGIN_HTML
+from private_pypi.backends.backend import PkgRepoSecret
 from private_pypi.workflow import (
         WorkflowStat,
         build_workflow_stat_and_run_daemon,
@@ -23,6 +22,7 @@ from private_pypi.workflow import (
         workflow_api_simple_distrib,
         workflow_api_upload_package,
 )
+from private_pypi.web import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
 app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'
@@ -107,7 +107,7 @@ def load_secret_from_request(wstat: WorkflowStat) -> Tuple[Optional[PkgRepoSecre
     if not current_user.pkg_repo_secret_raw:
         return None, f'Secret of the package repository "{name}" is empty.'
 
-    pkg_repo_secret = create_pkg_repo_secret(
+    pkg_repo_secret = wstat.backend_instance_manager.create_pkg_repo_secret(
             name=name,
             type=pkg_repo_config.type,
             raw=current_user.pkg_repo_secret_raw,

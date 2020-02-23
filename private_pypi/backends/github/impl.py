@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass
 from enum import Enum, auto
+from dataclasses import dataclass
 import hashlib
 import os
 import os.path
@@ -13,7 +13,7 @@ import requests
 import toml
 
 import private_pypi
-from private_pypi.pkg_repos.pkg_repo import (
+from private_pypi.backends.backend import (
         PkgRef,
         PkgRepo,
         PkgRepoConfig,
@@ -25,6 +25,7 @@ from private_pypi.pkg_repos.pkg_repo import (
         DownloadIndexStatus,
         DownloadIndexResult,
         record_error_if_raises,
+        basic_model_get_default,
 )
 from private_pypi.utils import (
         normalize_distribution_name,
@@ -35,27 +36,33 @@ from private_pypi.utils import (
 GITHUB_TYPE = 'github'
 
 
-@dataclass
 class GitHubConfig(PkgRepoConfig):
-    owner: str = ''
-    repo: str = ''
+    # Override.
+    type: str = GITHUB_TYPE
+    max_file_bytes: int = 2 * 1024**3 - 1
+    # GitHub specific.
+    owner: str
+    repo: str
     branch: str = 'master'
     index_filename: str = 'index.toml'
 
-    def __post_init__(self):
-        assert self.owner and self.repo
-        self.type = GITHUB_TYPE
-        # https://help.github.com/en/github/managing-large-files/distributing-large-binaries
-        self.max_file_bytes = 2 * 1024**3 - 1
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        if not self.owner or not self.repo:
+            raise ValueError('owner or repo is empty.')
+        if self.type != GITHUB_TYPE:
+            raise ValueError(f'type != {GITHUB_TYPE}')
 
 
-@dataclass
 class GitHubAuthToken(PkgRepoSecret):
-    token: Optional[str] = None
+    # Override.
+    type: str = GITHUB_TYPE
 
-    def __post_init__(self):
-        self.token = self.raw
-        self.type = GITHUB_TYPE
+    @property
+    def token(self) -> str:
+        # pylint: disable=no-member
+        return self.raw
 
     def secret_hash(self) -> str:
         sha256_algo = hashlib.sha256()
@@ -63,15 +70,14 @@ class GitHubAuthToken(PkgRepoSecret):
         return f'github-{sha256_algo.hexdigest()}'
 
 
-@dataclass
 class GitHubPkgRef(PkgRef):
-    url: str = ''
-
-    def __post_init__(self):
-        assert self.url
-        self.type = GITHUB_TYPE
+    # Override.
+    type: str = GITHUB_TYPE
+    # GitHub specific.
+    url: str
 
     def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
+        # pylint: disable=no-member
         headers = {
                 'Accept': 'application/octet-stream',
                 'Authorization': f'token {secret.token}',
@@ -121,43 +127,63 @@ LOCK_TIMEOUT = 0.5
 
 
 @dataclass
+class GitHubPkgRepoPrivateFields:
+    ready: bool
+    err_msg: str
+    client: Optional[github.Github] = None
+    fullname: Optional[str] = None
+    repo: Optional[github.Repository.Repository] = None
+    username: Optional[str] = None
+    permission: Optional[str] = None
+
+
 class GitHubPkgRepo(PkgRepo):
+    # Override.
+    type: str = GITHUB_TYPE
+    # GitHub specific.
     config: GitHubConfig
     secret: GitHubAuthToken
 
-    def __post_init__(self):
-        # pylint: disable=attribute-defined-outside-init
-        self._ready = True
-        self._err_msg = ''
+    __slots__ = ('_private_fields',)
+
+    @property
+    def _pvt(self) -> GitHubPkgRepoPrivateFields:
+        return object.__getattribute__(self, '_private_fields')
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        object.__setattr__(
+                self,
+                '_private_fields',
+                GitHubPkgRepoPrivateFields(ready=True, err_msg=''),
+        )
 
         try:
-            self._gh_client: github.Github = github.Github(self.secret.token)
-            self._gh_fullname = f'{self.config.owner}/{self.config.repo}'
-            self._gh_repo: github.Repository.Repository = \
-                    self._gh_client.get_repo(self._gh_fullname)
-            self._gh_username: str = self._gh_client.get_user().login
-            self._gh_permission: str = self._gh_repo.get_collaborator_permission(self._gh_username)
+            self._pvt.client = github.Github(self.secret.token)
+            self._pvt.fullname = f'{self.config.owner}/{self.config.repo}'
+            self._pvt.repo = self._pvt.client.get_repo(self._pvt.fullname)
+            self._pvt.username = self._pvt.client.get_user().login
+            self._pvt.permission = self._pvt.repo.get_collaborator_permission(self._pvt.username)
 
         except:  # pylint: disable=bare-except
             self.record_error(traceback.format_exc())
 
     def record_error(self, error_message: str) -> None:
-        # pylint: disable=attribute-defined-outside-init
-        self._ready = False
-        self._err_msg = error_message
+        self._pvt.ready = False
+        self._pvt.err_msg = error_message
 
     def ready(self) -> Tuple[bool, str]:
-        return self._ready, self._err_msg
+        return self._pvt.ready, self._pvt.err_msg
 
     def auth_read(self) -> bool:
-        return self._gh_permission != 'none'
+        return self._pvt.permission != 'none'
 
     def auth_write(self) -> bool:
-        return self._gh_permission in ('admin', 'write')
+        return self._pvt.permission in ('admin', 'write')
 
     def _check_published_release_not_exists(self, ctx: UploadAndDownloadPackageContext):
         try:
-            self._gh_repo.get_release(ctx.filename)
+            self._pvt.repo.get_release(ctx.filename)
             ctx.failed = True
             ctx.message = f'package={ctx.filename} has already exists.'
 
@@ -175,7 +201,7 @@ class GitHubPkgRepo(PkgRepo):
 
     def _create_draft_release(self, ctx: UploadAndDownloadPackageContext):
         try:
-            ctx.release = self._gh_repo.create_git_release(
+            ctx.release = self._pvt.repo.create_git_release(
                     tag=ctx.filename,
                     name=ctx.filename,
                     message='',
@@ -257,7 +283,7 @@ class GitHubPkgRepo(PkgRepo):
     def collect_all_published_packages(self) -> List[GitHubPkgRef]:
         pkg_refs: List[GitHubPkgRef] = []
 
-        for release in self._gh_repo.get_releases():
+        for release in self._pvt.repo.get_releases():
             if release.draft:
                 continue
 
@@ -303,7 +329,7 @@ class GitHubPkgRepo(PkgRepo):
         return pkg_refs
 
     def _get_index_sha(self) -> Optional[str]:
-        root_tree = self._gh_repo.get_git_tree(self.config.branch, recursive=False)
+        root_tree = self._pvt.repo.get_git_tree(self.config.branch, recursive=False)
         for tree_element in root_tree.tree:
             if tree_element.path == self.config.index_filename:
                 return tree_element.sha
@@ -316,7 +342,7 @@ class GitHubPkgRepo(PkgRepo):
                 with open(path, 'rb') as fin:
                     content = fin.read()
                 # Index file not exists, create file.
-                self._gh_repo.create_file(
+                self._pvt.repo.create_file(
                         path=self.config.index_filename,
                         message='Index file created.',
                         branch=self.config.branch,
@@ -327,7 +353,7 @@ class GitHubPkgRepo(PkgRepo):
                 with open(path, 'rb') as fin:
                     content = fin.read()
                 # Index file exists, and need to update.
-                self._gh_repo.update_file(
+                self._pvt.repo.update_file(
                         path=self.config.index_filename,
                         message='Index file updated.',
                         branch=self.config.branch,
@@ -360,7 +386,7 @@ class GitHubPkgRepo(PkgRepo):
                 # Same file, no need to download.
                 return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
 
-            content_file = self._gh_repo.get_contents(
+            content_file = self._pvt.repo.get_contents(
                     self.config.index_filename,
                     ref=self.config.branch,
             )
@@ -380,9 +406,9 @@ def github_create_package_repo(
         repo: str,
         token: str,
         owner: Optional[str] = None,
-        branch: str = GitHubConfig.branch,
-        index_filename: str = GitHubConfig.index_filename,
-        sync_index_interval: int = GitHubConfig.sync_index_interval,
+        branch: str = basic_model_get_default(GitHubConfig, 'branch'),
+        index_filename: str = basic_model_get_default(GitHubConfig, 'index_filename'),
+        sync_index_interval: int = basic_model_get_default(GitHubConfig, 'sync_index_interval'),
 ):
     gh_client = github.Github(token)
     gh_user = gh_client.get_user()
@@ -426,7 +452,8 @@ def github_create_package_repo(
     # Workflow setup in the default branch.
     main_yaml_content_with = '\n'
     # For compatibility, don't add the `with` statement if default values are used.
-    if branch != GitHubConfig.branch or index_filename != GitHubConfig.index_filename:
+    if branch != basic_model_get_default(GitHubConfig, 'branch') \
+            or index_filename != basic_model_get_default(GitHubConfig, 'index_filename'):
         main_yaml_content_with = f'''\
      with:
        github_branch: {branch}
@@ -461,16 +488,16 @@ jobs:
             index_filename=index_filename,
     )
 
-    github_config_dict = asdict(github_config)
+    github_config_dict = github_config.dict()
     github_config_dict.pop('name')
 
     # Pop the default settings.
     github_config_dict.pop('max_file_bytes')
-    if branch == GitHubConfig.branch:
+    if branch == basic_model_get_default(GitHubConfig, 'branch'):
         github_config_dict.pop('branch')
-    if index_filename == GitHubConfig.index_filename:
+    if index_filename == basic_model_get_default(GitHubConfig, 'index_filename'):
         github_config_dict.pop('index_filename')
-    if sync_index_interval == GitHubConfig.sync_index_interval:
+    if sync_index_interval == basic_model_get_default(GitHubConfig, 'sync_index_interval'):
         github_config_dict.pop('sync_index_interval')
 
     print('Package repository TOML config (please add to your private-pypi config file):\n')

@@ -2,11 +2,6 @@ from dataclasses import asdict
 from timeit import default_timer
 import time
 
-from private_pypi.pkg_repos import (
-        GitHubConfig,
-        load_pkg_repo_configs,
-        dump_pkg_repo_configs,
-)
 from private_pypi.workflow import (
         build_workflow_stat,
         pkg_repo_secret_is_authenticated,
@@ -23,18 +18,6 @@ class Timer:
 
     def __exit__(self, *args):
         self.delta = default_timer() - self.start
-
-
-def test_load_pkg_repo_configs(tmp_path):
-    gh_config = GitHubConfig(
-            name='foo',
-            owner='bar',
-            repo='baz',
-    )
-    dump_path = str(tmp_path / 'config.toml')
-    dump_pkg_repo_configs(dump_path, [gh_config])
-    name_to_configs = load_pkg_repo_configs(dump_path)
-    assert name_to_configs[gh_config.name] == gh_config
 
 
 def test_pkg_repo_secret_is_authenticated(preset_workflow_args):

@@ -1,7 +1,6 @@
 import time
 from tests.conftest import create_random_file
-from private_pypi.pkg_repos import (
-        GitHubPkgRepo,
+from private_pypi.backends.backend import (
         UploadPackageStatus,
         UploadIndexStatus,
         DownloadIndexStatus,
@@ -10,7 +9,7 @@ from private_pypi.utils import read_toml, write_toml
 
 
 def test_upload_small_package(dirty_github_pkg_repo, tmp_path):
-    repo: GitHubPkgRepo = dirty_github_pkg_repo
+    repo = dirty_github_pkg_repo
     result = repo.upload_package(
             'small-1.0-py3-none-any.whl',
             {'name': 'small'},
@@ -20,7 +19,7 @@ def test_upload_small_package(dirty_github_pkg_repo, tmp_path):
 
 
 def test_upload_and_download_index_file(empty_github_pkg_repo, tmp_path):
-    repo: GitHubPkgRepo = empty_github_pkg_repo
+    repo = empty_github_pkg_repo
 
     # Create.
     index_path = str(tmp_path / 'index.toml')

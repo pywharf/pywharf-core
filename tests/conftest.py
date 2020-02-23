@@ -1,4 +1,3 @@
-from dataclasses import asdict
 import os
 import os.path
 from datetime import datetime
@@ -8,14 +7,8 @@ import pytest
 import github
 
 import private_pypi
-from private_pypi.pkg_repos import (
-        GitHubConfig,
-        GitHubAuthToken,
-        LocalPaths,
-        GitHubPkgRepo,
-        load_pkg_repo_configs,
-        create_pkg_repo,
-)
+from private_pypi.backends.backend import LocalPaths, BackendInstanceManager
+from private_pypi.backends.github import GITHUB_TYPE
 from private_pypi.utils import read_toml, write_toml
 
 
@@ -91,9 +84,11 @@ def setup_test_github_repo():
 
 def create_github_pkg_repo_for_test(name):
     owner, repo, token = setup_test_github_repo()
-    return GitHubPkgRepo(
-            config=GitHubConfig(name=name, owner=owner, repo=repo),
-            secret=GitHubAuthToken(name=name, raw=token),
+    bim = BackendInstanceManager()
+    return bim.create_pkg_repo(
+            type=GITHUB_TYPE,
+            config=bim.create_pkg_repo_config(type=GITHUB_TYPE, name=name, owner=owner, repo=repo),
+            secret=bim.create_pkg_repo_secret(type=GITHUB_TYPE, name=name, raw=token),
             local_paths=LocalPaths(
                     index=str(tempfile.mkdtemp()),
                     log=str(tempfile.mkdtemp()),
@@ -117,13 +112,15 @@ def dirty_github_pkg_repo():
 def create_github_auth_token():
     gh_token = os.getenv('TEST_GITHUB_TOKEN')
     assert gh_token
-    return GitHubAuthToken(name='test_github_token', raw=gh_token)
+    bim = BackendInstanceManager()
+    return bim.create_pkg_repo_secret(type=GITHUB_TYPE, name='test_github_token', raw=gh_token)
 
 
 @pytest.fixture(scope='session')
 def preset_github_pkg_repo():
-    pkg_repo_configs = load_pkg_repo_configs('tests/fixtures/preset_config.toml')
-    yield create_pkg_repo(
+    bim = BackendInstanceManager()
+    pkg_repo_configs = bim.load_pkg_repo_configs('tests/fixtures/preset_config.toml')
+    yield bim.create_pkg_repo(
             config=pkg_repo_configs['preset_github_test'],
             secret=create_github_auth_token(),
             local_paths=LocalPaths(
@@ -155,7 +152,7 @@ def preset_workflow_args():
 @pytest.fixture(scope='session')
 def preset_workflow_with_admin_secret_args():
     admin_pkg_repo_secret_file = os.path.join(tempfile.mkdtemp(), 'admin_secret.toml')
-    secret_dict = asdict(create_github_auth_token())
+    secret_dict = create_github_auth_token().dict()
     secret_dict.pop('name')
     write_toml(admin_pkg_repo_secret_file, {'preset_github_test': secret_dict})
 

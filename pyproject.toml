@@ -28,6 +28,7 @@ flask-login = "^0.5.0"
 psutil = "^5.6.7"
 waitress = "^1.4.3"
 Paste = "^3.4.0"
+pydantic = "^1.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -37,7 +38,7 @@ pylint = "^2.4.4"
 [tool.poetry.scripts]
 private_pypi_server = "private_pypi.server:run_server_cli"
 private_pypi_sync_local_index_daemon = "private_pypi.workflow:sync_local_index_daemon_cli"
-private_pypi_github_create_package_repo = "private_pypi.pkg_repos.github:github_create_package_repo_cli"
+private_pypi_github_create_package_repo = "private_pypi.backends.github.impl:github_create_package_repo_cli"
 
 [build-system]
 requires = ["poetry>=0.12"]
