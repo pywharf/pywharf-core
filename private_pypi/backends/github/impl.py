@@ -374,10 +374,7 @@ class GitHubPkgRepo(PkgRepo):
             raise FileNotFoundError(f'{path} not exists.')
 
         index_sha = self._get_index_sha()
-        if not index_sha:
-            raise FileNotFoundError('Remote sha not found.')
-
-        return index_sha == git_hash_sha(path)
+        return index_sha is not None and index_sha == git_hash_sha(path)
 
     @record_error_if_raises
     def download_index(self, path: str) -> DownloadIndexResult:
@@ -470,7 +467,7 @@ jobs:
  build:
   runs-on: ubuntu-latest
   steps:
-   - uses: private-pypi/private-pypi-sync-index@master
+   - uses: private-pypi/private-pypi-github-update-index@master
 '''
     gh_repo.create_file(
             path='.github/workflows/main.yml',
