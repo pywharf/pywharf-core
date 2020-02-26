@@ -458,7 +458,7 @@ def github_create_package_repo(
 '''
     # Body.
     main_yaml_content = f'''\
-name: sync-index
+name: update-index-job
 on:
  push:
  schedule:
