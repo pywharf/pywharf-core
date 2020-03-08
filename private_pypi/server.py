@@ -1,31 +1,29 @@
-import atexit
 from dataclasses import dataclass
-import os
-from os.path import join, splitext
+from os.path import join
 from typing import Any, Optional, Tuple
 import uuid
 import logging
 
 import fire
-from flask import Flask, current_app, redirect, request, session
+from flask import Flask, current_app, redirect, request, session, send_file
 from flask_login import LoginManager, UserMixin, current_user, login_required
-import psutil
 import waitress
 from paste.translogger import TransLogger
 
 from private_pypi.backends.backend import PkgRepoSecret
 from private_pypi.workflow import (
         WorkflowStat,
-        build_workflow_stat_and_run_daemon,
+        initialize_workflow,
         workflow_api_redirect_package_download_url,
         workflow_api_simple,
         workflow_api_simple_distrib,
         workflow_api_upload_package,
 )
+from private_pypi.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
 from private_pypi.web import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
-app.secret_key = 'MY_FRIEND_THIS_IS_NOT_SECURE'
+app.secret_key = get_secret_key()
 
 login_manager = LoginManager()  # pylint: disable=invalid-name
 login_manager.init_app(app)
@@ -67,7 +65,7 @@ def load_user_from_request(_):
         return MockUser(pkg_repo_name=username, pkg_repo_secret_raw=password)
 
 
-@app.route("/login/", methods=["GET", "POST"])
+@app.route('/login/', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET':
         return LOGIN_HTML
@@ -81,10 +79,10 @@ def login():
     session[SESSION_KEY_PKG_REPO_NAME] = pkg_repo_name
     session[SESSION_KEY_PKG_REPO_SECRET_RAW] = pkg_repo_secret_raw
 
-    return redirect(request.args.get("next") or '/simple/')
+    return redirect(request.args.get('next') or '/simple/')
 
 
-@app.route("/logout/", methods=["GET"])
+@app.route('/logout/', methods=['GET'])
 def logout():
     session[SESSION_KEY_PKG_REPO_NAME] = None
     session[SESSION_KEY_PKG_REPO_SECRET_RAW] = None
@@ -117,7 +115,7 @@ def load_secret_from_request(wstat: WorkflowStat) -> Tuple[Optional[PkgRepoSecre
 
 @app.route('/simple/', methods=['GET'])
 @login_required
-def api_simple():
+def pep503_api_simple():
     pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
     if pkg_repo_secret is None:
         return err_msg, 401
@@ -129,7 +127,7 @@ def api_simple():
 
 @app.route('/simple/<distrib>/', methods=['GET'])
 @login_required
-def api_simple_distrib(distrib):
+def pep503_api_simple_distrib(distrib):
     pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
     if pkg_repo_secret is None:
         return err_msg, 401
@@ -151,13 +149,10 @@ def api_simple_distrib(distrib):
 
 @app.route('/simple/<distrib>/<filename>', methods=['GET'])
 @login_required
-def api_redirect_package_download_url(distrib, filename):
-    package, ext = splitext(filename)
-    ext = ext.lstrip('.')
+def pep503_api_redirect_package_download_url(distrib, filename):
+    package, ext = split_package_ext(filename)
     if not ext:
-        return 'Empty extension.', 404
-    if len(ext) > len('tar.gz'):
-        return f'Invalid entension "{ext}"', 404
+        return 'Extension not supported.', 404
 
     pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
     if pkg_repo_secret is None:
@@ -177,11 +172,22 @@ def api_redirect_package_download_url(distrib, filename):
     return redirect(auth_url)
 
 
+@app.route('/local_file/<encrypted_ref>', methods=['GET'])
+def local_file(encrypted_ref):
+    passed, path, filename = decrypt_local_file_ref(encrypted_ref)
+    if not passed:
+        return 'Expired or invalid encrypted_ref.', 401
+
+    rsp = send_file(path, as_attachment=True, attachment_filename=filename)
+    rsp.direct_passthrough = False
+    return rsp
+
+
 # https://warehouse.pypa.io/api-reference/legacy/#upload-api
 @app.route('/simple/', methods=['POST'])
 @login_required
-def api_upload_package():  # pylint: disable=too-many-return-statements
-    cache_folder = current_app.workflow_stat.local_paths.cache
+def legacy_api_upload_package():  # pylint: disable=too-many-return-statements
+    cache_folder = current_app.workflow_stat.root_local_paths.cache
 
     pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
     if pkg_repo_secret is None:
@@ -214,16 +220,6 @@ def api_upload_package():  # pylint: disable=too-many-return-statements
     return body, status_code
 
 
-def stop_all_children_processes():
-    procs = psutil.Process().children()
-    for proc in procs:
-        proc.terminate()
-
-    _, alive = psutil.wait_procs(procs, timeout=10)
-    for proc in alive:
-        proc.kill()
-
-
 def run_server(
         config: str,
         root: str,
@@ -236,18 +232,13 @@ def run_server(
         port: int = 8888,
         **waitress_options: Any,
 ):
-    # All processes in the current process group will be terminated
-    # with the lead process.
-    os.setpgrp()
-    atexit.register(stop_all_children_processes)
-
     # Make sure EXTRA_INDEX_URL ends with slash.
     # NOTE: EXTRA_INDEX_URL will be set as '/' if --extra_index_url=''.
     app.config['EXTRA_INDEX_URL'] = extra_index_url.rstrip('/') + '/'
 
     with app.app_context():
         # Init.
-        current_app.workflow_stat = build_workflow_stat_and_run_daemon(
+        current_app.workflow_stat = initialize_workflow(
                 pkg_repo_config_file=config,
                 admin_pkg_repo_secret_file=admin_secret,
                 root_folder=root,
@@ -255,13 +246,14 @@ def run_server(
                 auth_write_expires=auth_write_expires,
         )
         server_logging_path = join(
-                current_app.workflow_stat.local_paths.log,
+                current_app.workflow_stat.root_local_paths.log,
                 'private_pypi_server.log',
         )
 
     # Setup logging.
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger("filelock").setLevel(logging.WARNING)
+    logging.getLogger('filelock').setLevel(logging.WARNING)
+    logging.getLogger('apscheduler').setLevel(logging.WARNING)
     logging.getLogger().addHandler(logging.FileHandler(server_logging_path))
 
     if debug:
@@ -281,6 +273,7 @@ def run_server(
             print(str(response.headers).strip())
             print('==== RESPONSE DATA ====')
             print(response.get_data())
+            print()
             return response
 
         app.before_request(print_request)

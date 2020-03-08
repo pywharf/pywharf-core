@@ -20,6 +20,7 @@ from private_pypi.backends.backend import (
         PkgRepoSecret,
         UploadPackageStatus,
         UploadPackageResult,
+        UploadPackageContext,
         UploadIndexStatus,
         UploadIndexResult,
         DownloadIndexStatus,
@@ -27,11 +28,7 @@ from private_pypi.backends.backend import (
         record_error_if_raises,
         basic_model_get_default,
 )
-from private_pypi.utils import (
-        normalize_distribution_name,
-        update_hash_algo_with_file,
-        git_hash_sha,
-)
+from private_pypi.utils import git_hash_sha, split_package_ext
 
 GITHUB_TYPE = 'github'
 
@@ -51,8 +48,6 @@ class GitHubConfig(PkgRepoConfig):
 
         if not self.owner or not self.repo:
             raise ValueError('owner or repo is empty.')
-        if self.type != GITHUB_TYPE:
-            raise ValueError(f'type != {GITHUB_TYPE}')
 
 
 class GitHubAuthToken(PkgRepoSecret):
@@ -61,7 +56,6 @@ class GitHubAuthToken(PkgRepoSecret):
 
     @property
     def token(self) -> str:
-        # pylint: disable=no-member
         return self.raw
 
     def secret_hash(self) -> str:
@@ -77,7 +71,6 @@ class GitHubPkgRef(PkgRef):
     url: str
 
     def auth_url(self, config: GitHubConfig, secret: GitHubAuthToken) -> str:
-        # pylint: disable=no-member
         headers = {
                 'Accept': 'application/octet-stream',
                 'Authorization': f'token {secret.token}',
@@ -114,13 +107,8 @@ class JobType(Enum):
 
 
 @dataclass
-class UploadAndDownloadPackageContext:
-    filename: str
-    path: str
-    meta: Optional[Dict[str, str]] = None
+class GitHubUploadPackageContext(UploadPackageContext):
     release: github.GitRelease.GitRelease = None
-    failed: bool = False
-    message: str = ''
 
 
 LOCK_TIMEOUT = 0.5
@@ -165,7 +153,7 @@ class GitHubPkgRepo(PkgRepo):
             self._pvt.username = self._pvt.client.get_user().login
             self._pvt.permission = self._pvt.repo.get_collaborator_permission(self._pvt.username)
 
-        except:  # pylint: disable=bare-except
+        except Exception:  # pylint: disable=broad-except
             self.record_error(traceback.format_exc())
 
     def record_error(self, error_message: str) -> None:
@@ -181,7 +169,7 @@ class GitHubPkgRepo(PkgRepo):
     def auth_write(self) -> bool:
         return self._pvt.permission in ('admin', 'write')
 
-    def _check_published_release_not_exists(self, ctx: UploadAndDownloadPackageContext):
+    def _check_if_published_release_not_exists(self, ctx: GitHubUploadPackageContext):
         try:
             self._pvt.repo.get_release(ctx.filename)
             ctx.failed = True
@@ -199,7 +187,7 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in conflict validation.\n' + str(ex.data)
 
-    def _create_draft_release(self, ctx: UploadAndDownloadPackageContext):
+    def _create_draft_release(self, ctx: GitHubUploadPackageContext):
         try:
             ctx.release = self._pvt.repo.create_git_release(
                     tag=ctx.filename,
@@ -216,7 +204,8 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in draft release creation.\n' + str(ex.data)
 
-    def _upload_package_as_release_asset(self, ctx: UploadAndDownloadPackageContext):  # pylint: disable=no-self-use
+    @staticmethod
+    def _upload_package_as_release_asset(ctx: GitHubUploadPackageContext):
         # Upload as release asset.
         try:
             ctx.release.upload_asset(
@@ -229,19 +218,8 @@ class GitHubPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = 'github exception in asset upload.\n' + str(ex.data)
 
-    def _fill_meta_and_publish_release(self, ctx: UploadAndDownloadPackageContext):  # pylint: disable=no-self-use
-        # Fill distribution name.
-        if not ctx.meta.get('distrib'):
-            name = ctx.meta.get('name')
-            if name:
-                ctx.meta['distrib'] = normalize_distribution_name(name)
-
-        # SHA256 checksum, also suggested by PEP-503.
-        if not ctx.meta.get('sha256'):
-            sha256_algo = hashlib.sha256()
-            update_hash_algo_with_file(ctx.path, sha256_algo)
-            ctx.meta['sha256'] = sha256_algo.hexdigest()
-
+    @staticmethod
+    def _fill_meta_and_publish_release(ctx: GitHubUploadPackageContext):
         body = toml.dumps(ctx.meta)
         try:
             ctx.release.update_release(
@@ -256,10 +234,11 @@ class GitHubPkgRepo(PkgRepo):
             ctx.message = 'github exception in release publishing.\n' + str(ex.data)
 
     def upload_package_job(self, filename: str, meta: Dict[str, str], path: str):
-        ctx = UploadAndDownloadPackageContext(filename=filename, meta=meta, path=path)
+        ctx = GitHubUploadPackageContext(filename=filename, meta=meta, path=path)
 
         for action in (
-                self._check_published_release_not_exists,
+                lambda _: None,  # Validate the context initialization.
+                self._check_if_published_release_not_exists,
                 self._create_draft_release,
                 self._upload_package_as_release_asset,
                 self._fill_meta_and_publish_release,
@@ -297,11 +276,8 @@ class GitHubPkgRepo(PkgRepo):
             if not distrib or not sha256:
                 continue
 
-            package, ext = os.path.splitext(release.tag_name)
-            ext = ext.lstrip('.')
-            if not package or not ext:
-                continue
-            if len(ext) > len('tar.gz'):
+            package, ext = split_package_ext(release.tag_name)
+            if not ext:
                 continue
 
             raw_assets = release._rawData.get('assets')  # pylint: disable=protected-access
@@ -363,7 +339,7 @@ class GitHubPkgRepo(PkgRepo):
 
             return UploadIndexResult(status=UploadIndexStatus.SUCCEEDED)
 
-        except:  # pylint: disable=bare-except
+        except Exception:  # pylint: disable=broad-except
             error_message = traceback.format_exc()
             self.record_error(error_message)
             return UploadIndexResult(status=UploadIndexStatus.FAILED, message=error_message)
@@ -392,7 +368,7 @@ class GitHubPkgRepo(PkgRepo):
 
             return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
 
-        except:  # pylint: disable=bare-except
+        except Exception:  # pylint: disable=broad-except
             error_message = traceback.format_exc()
             self.record_error(error_message)
             return DownloadIndexResult(status=DownloadIndexStatus.FAILED, message=error_message)

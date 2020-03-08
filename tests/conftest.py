@@ -141,9 +141,9 @@ def preset_workflow_args():
             'admin_pkg_repo_secret_file': None,
     }
     preset_github_test_index = read_toml('tests/fixtures/preset_github_test_index.toml')
-    os.mkdir(os.path.join(args['root_folder'], 'index'))
+    os.makedirs(os.path.join(args['root_folder'], 'index/preset_github_test'))
     write_toml(
-            os.path.join(args['root_folder'], 'index/preset_github_test.index'),
+            os.path.join(args['root_folder'], 'index/preset_github_test/index.toml'),
             preset_github_test_index,
     )
     yield args

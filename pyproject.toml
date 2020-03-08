@@ -29,6 +29,10 @@ psutil = "^5.6.7"
 waitress = "^1.4.3"
 Paste = "^3.4.0"
 pydantic = "^1.4"
+cryptography = "^2.8"
+redis-server = "^5.0.7"
+dramatiq = {extras = ["redis"], version = "^1.8.1"}
+apscheduler = "^3.6.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -37,7 +41,6 @@ pylint = "^2.4.4"
 
 [tool.poetry.scripts]
 private_pypi_server = "private_pypi.server:run_server_cli"
-private_pypi_sync_local_index_daemon = "private_pypi.workflow:sync_local_index_daemon_cli"
 private_pypi_github_create_package_repo = "private_pypi.backends.github.impl:github_create_package_repo_cli"
 
 [build-system]

@@ -1,14 +1,22 @@
 from abc import abstractmethod
+from dataclasses import dataclass
 from enum import Enum, auto
 import functools
+import hashlib
 import importlib
+import os
 import pkgutil
 import traceback
 from typing import Dict, List, Tuple, Iterable, TypeVar, Type, Optional
 import inspect
 
 from pydantic import BaseModel
-from private_pypi.utils import read_toml, write_toml, normalize_distribution_name
+from private_pypi.utils import (
+        read_toml,
+        write_toml,
+        normalize_distribution_name,
+        update_hash_algo_with_file,
+)
 
 
 ####################
@@ -21,6 +29,13 @@ class LocalPaths(BaseModel):
     job: str
     cache: str
 
+    def makedirs(self):
+        os.makedirs(self.index, exist_ok=True)
+        os.makedirs(self.log, exist_ok=True)
+        os.makedirs(self.lock, exist_ok=True)
+        os.makedirs(self.job, exist_ok=True)
+        os.makedirs(self.cache, exist_ok=True)
+
 
 class UploadPackageStatus(Enum):
     SUCCEEDED = auto()
@@ -30,6 +45,41 @@ class UploadPackageStatus(Enum):
 class UploadPackageResult(BaseModel):
     status: UploadPackageStatus
     message: str = ''
+
+
+@dataclass
+class UploadPackageContext:
+    filename: str
+    path: str
+    meta: Optional[Dict[str, str]] = None
+    failed: bool = False
+    message: str = ''
+
+    def __post_init__(self):
+        # Fill distribution name.
+        if not self.meta.get('distrib'):
+            name = self.meta.get('name')
+            if name:
+                self.meta['distrib'] = normalize_distribution_name(name)
+            else:
+                self.failed = True
+                self.message = 'Cannot generate the distribution name.'
+        assert self.meta_distrib
+
+        # SHA256 checksum, also suggested by PEP-503.
+        if not self.meta.get('sha256'):
+            sha256_algo = hashlib.sha256()
+            update_hash_algo_with_file(self.path, sha256_algo)
+            self.meta['sha256'] = sha256_algo.hexdigest()
+        assert self.meta_sha256
+
+    @property
+    def meta_distrib(self) -> str:
+        return self.meta['distrib']
+
+    @property
+    def meta_sha256(self) -> str:
+        return self.meta['sha256']
 
 
 class UploadIndexStatus(Enum):
@@ -205,16 +255,20 @@ class BackendInstanceManager:
             if not isinstance(struct, dict):
                 raise ValueError(f'Invalid pkg_repo_config, name={name}, struct={struct}')
 
+            name = name.lower()
             config = self.create_pkg_repo_config(name=name, **struct)
             name_to_pkg_repo_config[name] = config
 
         return name_to_pkg_repo_config
 
-    def dump_pkg_repo_configs(self, path: str, pkg_repo_configs: Iterable[PkgRepoConfig]) -> None:  # pylint: disable=no-self-use
+    @staticmethod
+    def dump_pkg_repo_configs(path: str, pkg_repo_configs: Iterable[PkgRepoConfig]) -> None:
         dump = {}
+
         for pkg_repo_config in pkg_repo_configs:
             struct = pkg_repo_config.dict()
             name = struct.pop('name')
+            name = name.lower()
             dump[name] = struct
 
         write_toml(path, dump)
@@ -231,13 +285,15 @@ class BackendInstanceManager:
 
         return name_to_pkg_repo_secret
 
-    def dump_pkg_repo_secrets(self, path: str, pkg_repo_secrets: Iterable[PkgRepoSecret]) -> None:  # pylint: disable=no-self-use
+    @staticmethod
+    def dump_pkg_repo_secrets(path: str, pkg_repo_secrets: Iterable[PkgRepoSecret]) -> None:
         raise NotImplementedError('Should not dump secrets.')
 
     def load_pkg_refs(self, path: str) -> List[PkgRef]:
         return [self.create_pkg_ref(**struct) for struct in read_toml(path)['pkgs']]
 
-    def dump_pkg_refs(self, path: str, pkg_refs: Iterable[PkgRef]) -> None:  # pylint: disable=no-self-use
+    @staticmethod
+    def dump_pkg_refs(path: str, pkg_refs: Iterable[PkgRef]) -> None:
         write_toml(path, {'pkgs': [pkg_ref.dict() for pkg_ref in pkg_refs]})
 
 
