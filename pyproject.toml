@@ -1,15 +1,18 @@
 [tool.poetry]
-name = "private-pypi"
-version = "0.1.1"
+name = "private-pypi-core"
+version = "0.1.0"
 description = "A private PyPI server powered by flexible backends."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
 readme = "README.md"
-repository = "https://github.com/private-pypi/private-pypi"
+repository = "https://github.com/private-pypi/private-pypi-core"
 keywords = ["private", "pypi", "packaging", "dependency"]
 classifiers = [
     "Topic :: Software Development :: Build Tools",
     "Topic :: Software Development :: Libraries :: Python Modules"
+]
+packages = [
+    { include = "private_pypi" },
 ]
 
 [tool.poetry.dependencies]
