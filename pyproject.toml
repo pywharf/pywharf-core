@@ -1,23 +1,19 @@
 [tool.poetry]
 name = "private-pypi"
 version = "0.1.1"
-description = "A private PyPI server powered by backend(s) like GitHub."
+description = "A private PyPI server powered by flexible backends."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
 readme = "README.md"
 repository = "https://github.com/private-pypi/private-pypi"
-keywords = ["private", "pypi", "github", "packaging", "dependency"]
+keywords = ["private", "pypi", "packaging", "dependency"]
 classifiers = [
     "Topic :: Software Development :: Build Tools",
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 
 [tool.poetry.dependencies]
-# TODO: Will support all python versions in the future
-# by using https://github.com/private-pypi/wheel-compiler
 python = "^3.7"
-requests = "^2.22.0"
-PyGithub = "^1.45"
 toml = "^0.10.0"
 filelock = "^3.0.12"
 shortuuid = "^0.5.0"
@@ -41,7 +37,6 @@ pylint = "^2.4.4"
 
 [tool.poetry.scripts]
 private_pypi_server = "private_pypi.server:run_server_cli"
-private_pypi_github_create_package_repo = "private_pypi.backends.github.impl:github_create_package_repo_cli"
 
 [build-system]
 requires = ["poetry>=0.12"]

@@ -1,6 +1,0 @@
-[preset_github_test]
-type = "github"
-owner = "private-pypi-test"
-repo = "private-pypi-test-20200223205253541850"
-branch = "master"
-index_filename = "index.toml"

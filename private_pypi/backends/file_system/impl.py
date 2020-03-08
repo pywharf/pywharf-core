@@ -98,7 +98,7 @@ def update_index_job(file_system_pkg_repo_kwargs):
 class FileSystemPkgRepo(PkgRepo):
     # Override.
     type: str = FILE_SYSTEM_TYPE
-    # GitHub specific.
+    # File system specific.
     config: FileSystemConfig
     secret: FileSystemSecret
 
