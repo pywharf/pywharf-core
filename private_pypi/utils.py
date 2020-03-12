@@ -81,7 +81,8 @@ def file_lock_is_busy(lock_path):
 
 
 @dataclass
-class LockedFileLikeObject(TextIO):  # pylint: disable=abstract-method
+class LockedFileLikeObject(TextIO):
+    # pylint: disable=abstract-method
     lock_path: str
     write_func: Callable
 

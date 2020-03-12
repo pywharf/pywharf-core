@@ -287,7 +287,15 @@ class BackendInstanceManager:
 
     @staticmethod
     def dump_pkg_repo_secrets(path: str, pkg_repo_secrets: Iterable[PkgRepoSecret]) -> None:
-        raise NotImplementedError('Should not dump secrets.')
+        dump = {}
+
+        for pkg_repo_config in pkg_repo_secrets:
+            struct = pkg_repo_config.dict()
+            name = struct.pop('name')
+            name = name.lower()
+            dump[name] = struct
+
+        write_toml(path, dump)
 
     def load_pkg_refs(self, path: str) -> List[PkgRef]:
         return [self.create_pkg_ref(**struct) for struct in read_toml(path)['pkgs']]

@@ -31,7 +31,6 @@ from private_pypi.utils import (
         encrypt_local_file_ref,
         split_package_ext,
 )
-from private_pypi.job import dynamic_dramatiq
 
 FILE_SYSTEM_TYPE = 'file_system'
 
@@ -81,18 +80,6 @@ class FileSystemPkgRepoPrivateFields:
 
 LOCK_TIMEOUT = 0.5
 META_SUFFIX = '.meta'
-
-
-@dynamic_dramatiq.actor()
-def update_index_job(file_system_pkg_repo_kwargs):
-    pkg_repo = FileSystemPkgRepo(**file_system_pkg_repo_kwargs)
-
-    pkg_refs = pkg_repo.collect_all_published_packages()
-    tmp_index_path = join(pkg_repo.local_paths.cache, f'tmp_index_{shortuuid.uuid()}.toml')
-    BackendInstanceManager.dump_pkg_refs(tmp_index_path, pkg_refs)
-
-    if not pkg_repo.local_index_is_up_to_date(tmp_index_path):
-        pkg_repo.upload_index(tmp_index_path)
 
 
 class FileSystemPkgRepo(PkgRepo):
@@ -178,7 +165,11 @@ class FileSystemPkgRepo(PkgRepo):
                 shutil.copyfile(ctx.path, pkg_path)
                 write_toml(pkg_meta_path, ctx.meta)
 
-            update_index_job(self.dict())
+            # Update index.
+            pkg_refs = self.collect_all_published_packages()
+            tmp_index_path = join(self.local_paths.cache, f'tmp_index_{shortuuid.uuid()}.toml')
+            BackendInstanceManager.dump_pkg_refs(tmp_index_path, pkg_refs)
+            self.upload_index(tmp_index_path)
 
         except TimeoutError:
             ctx.failed = True
