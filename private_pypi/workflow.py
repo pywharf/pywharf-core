@@ -18,7 +18,7 @@ import psutil
 import redis_server
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from private_pypi.backends.backend import (
+from private_pypi.backend import (
         DownloadIndexStatus,
         LocalPaths,
         PkgRef,

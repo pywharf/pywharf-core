@@ -10,7 +10,7 @@ import traceback
 from filelock import FileLock
 import shortuuid
 
-from private_pypi.backends.backend import (
+from private_pypi.backend import (
         PkgRef,
         PkgRepo,
         PkgRepoConfig,
@@ -175,7 +175,7 @@ class FileSystemPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = '_upload_package: Lock acquire timeout.'
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             ctx.failed = True
             ctx.message = '_upload_package:\n' + traceback.format_exc()
 
@@ -241,7 +241,7 @@ class FileSystemPkgRepo(PkgRepo):
             with FileLock(self._index_lock_path, timeout=LOCK_TIMEOUT):
                 return exists(self._index_path) \
                         and git_hash_sha(path) == git_hash_sha(self._index_path)
-        except:
+        except Exception:  # pylint: disable=broad-except
             return False
 
     def upload_index(self, path: str) -> UploadIndexResult:
@@ -256,7 +256,7 @@ class FileSystemPkgRepo(PkgRepo):
                     message='upload_index: Lock acquire timeout.',
             )
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             return UploadIndexResult(
                     status=UploadIndexStatus.FAILED,
                     message='upload_index:\n' + traceback.format_exc(),
@@ -277,7 +277,7 @@ class FileSystemPkgRepo(PkgRepo):
                     message='download_index: Lock acquire timeout.',
             )
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             return DownloadIndexResult(
                     status=DownloadIndexStatus.FAILED,
                     message='download_index:\n' + traceback.format_exc(),

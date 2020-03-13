@@ -195,7 +195,7 @@ class BackendInstanceManager:
         self._type_to_registration = {}
 
         # Namespace package root.
-        root_module = importlib.import_module('.', 'private_pypi.backends')
+        root_module = importlib.import_module('.', 'private_pypi_backends')
         # Find all submodules.
         for module_info in pkgutil.iter_modules(
                 root_module.__path__,  # type: ignore

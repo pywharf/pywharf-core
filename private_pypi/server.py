@@ -10,7 +10,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_required
 import waitress
 from paste.translogger import TransLogger
 
-from private_pypi.backends.backend import PkgRepoSecret
+from private_pypi.backend import PkgRepoSecret
 from private_pypi.workflow import (
         WorkflowStat,
         initialize_workflow,

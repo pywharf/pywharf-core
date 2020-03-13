@@ -7,12 +7,10 @@ import inspect
 import pytest
 import shortuuid
 
-from private_pypi.backends.backend import (
+from private_pypi.backend import (
         BackendInstanceManager,
         PkgRepoConfig,
         PkgRepoSecret,
-        PkgRepo,
-        LocalPaths,
 )
 from private_pypi.workflow import (
         WorkflowStat,

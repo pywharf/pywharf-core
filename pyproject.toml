@@ -13,6 +13,7 @@ classifiers = [
 ]
 packages = [
     { include = "private_pypi" },
+    { include = "private_pypi_backends" },
     { include = "private_pypi_testkit" },
 ]
 

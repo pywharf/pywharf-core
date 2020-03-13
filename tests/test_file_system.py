@@ -3,7 +3,7 @@ from typing import Tuple
 import shortuuid
 
 from private_pypi_testkit import TestKit, RepoInfoForTest
-from private_pypi.backends.file_system.impl import (
+from private_pypi_backends.file_system.impl import (
         FileSystemConfig,
         FileSystemSecret,
 )
