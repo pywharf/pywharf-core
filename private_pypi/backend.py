@@ -10,7 +10,8 @@ import traceback
 from typing import Dict, List, Tuple, Iterable, TypeVar, Type, Optional
 import inspect
 
-from pydantic import BaseModel
+# TODO: follows https://github.com/PyCQA/pylint/issues/1524
+from pydantic import BaseModel  # pylint: disable=no-name-in-module
 from private_pypi.utils import (
         read_toml,
         write_toml,
