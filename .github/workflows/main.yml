@@ -55,7 +55,7 @@ jobs:
 
     - name: Setup pip/poetry
       run: |
-        pip install -U pip poetry
+        pip install -U pip poetry twine
         pip --version
         poetry --version
         poetry config virtualenvs.create false
