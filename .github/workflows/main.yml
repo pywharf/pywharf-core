@@ -33,8 +33,8 @@ jobs:
 
     - name: Lint.
       run: |
-        pylint private_pypi
-        yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi
+        pylint private_pypi_core
+        yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_core
 
         pylint private_pypi_backends
         yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_backends
