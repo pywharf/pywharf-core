@@ -43,7 +43,7 @@ dynamic_dramatiq = DynamicDramatiq()  # pylint: disable=invalid-name
 _REDIS_BROKER_PORT = os.getenv('DYNAMIC_DRAMATIQ_REDIS_BROKER_PORT')
 if _REDIS_BROKER_PORT:
     # 1. Load actors.
-    import private_pypi.workflow  # pylint: disable=unused-import
+    import private_pypi_core.workflow  # pylint: disable=unused-import
     from private_pypi_core.backend import BackendInstanceManager
     BackendInstanceManager()
 
