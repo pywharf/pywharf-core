@@ -7,7 +7,7 @@ import importlib
 import os
 import pkgutil
 import traceback
-from typing import Dict, List, Tuple, Iterable, TypeVar, Type, Optional
+from typing import Any, Callable, Dict, List, Tuple, Iterable, TypeVar, Type, Optional
 import inspect
 
 # TODO: follows https://github.com/PyCQA/pylint/issues/1524
@@ -185,6 +185,7 @@ class BackendRegistration:
     pkg_repo_secret_cls: Type[PkgRepoSecret] = PkgRepoSecret
     pkg_repo_cls: Type[PkgRepo] = PkgRepo
     pkg_ref_cls: Type[PkgRef] = PkgRef
+    cli_name_to_func: Dict[str, Callable[[], int]]
 
 
 ######################
