@@ -41,3 +41,11 @@ jobs:
 
         pylint private_pypi_testkit
         yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_testkit
+
+    - name: Publish.
+      run: |
+        poetry build
+        twine upload --skip-existing dist/*
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
