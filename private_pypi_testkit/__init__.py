@@ -42,7 +42,7 @@ def create_random_file(path, size):
 def test_upload_with_write_secret(session_repo, tmpdir, update_repo_index):
     distrib = shortuuid.uuid()
     filename = f'{distrib}-1.0-py3-none-any.whl'
-    path = tmpdir.join(filename)
+    path = str(tmpdir.join(filename))
     create_random_file(path, 128)
 
     # Upload.
@@ -76,7 +76,7 @@ def test_upload_with_write_secret(session_repo, tmpdir, update_repo_index):
 def test_upload_with_read_secret(session_repo, tmpdir):
     distrib = shortuuid.uuid()
     filename = f'{distrib}-1.0-py3-none-any.whl'
-    path = tmpdir.join(filename)
+    path = str(tmpdir.join(filename))
     create_random_file(path, 128)
 
     _, status_code = workflow_api_upload_package(
