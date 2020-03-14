@@ -185,7 +185,7 @@ class BackendRegistration:
     pkg_repo_secret_cls: Type[PkgRepoSecret] = PkgRepoSecret
     pkg_repo_cls: Type[PkgRepo] = PkgRepo
     pkg_ref_cls: Type[PkgRef] = PkgRef
-    cli_name_to_func: Dict[str, Callable[[], int]]
+    cli_name_to_func: Dict[str, Callable[[], int]] = {}
 
 
 ######################
