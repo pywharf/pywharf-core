@@ -44,7 +44,7 @@ _REDIS_BROKER_PORT = os.getenv('DYNAMIC_DRAMATIQ_REDIS_BROKER_PORT')
 if _REDIS_BROKER_PORT:
     # 1. Load actors.
     import private_pypi.workflow  # pylint: disable=unused-import
-    from private_pypi.backend import BackendInstanceManager
+    from private_pypi_core.backend import BackendInstanceManager
     BackendInstanceManager()
 
     # 2. Connect to broker.

@@ -10,7 +10,7 @@ import traceback
 from filelock import FileLock
 import shortuuid
 
-from private_pypi.backend import (
+from private_pypi_core.backend import (
         PkgRef,
         PkgRepo,
         PkgRepoConfig,
@@ -24,7 +24,7 @@ from private_pypi.backend import (
         DownloadIndexResult,
         BackendInstanceManager,
 )
-from private_pypi.utils import (
+from private_pypi_core.utils import (
         write_toml,
         read_toml,
         git_hash_sha,

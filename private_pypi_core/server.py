@@ -10,8 +10,8 @@ from flask_login import LoginManager, UserMixin, current_user, login_required
 import waitress
 from paste.translogger import TransLogger
 
-from private_pypi.backend import PkgRepoSecret
-from private_pypi.workflow import (
+from private_pypi_core.backend import PkgRepoSecret
+from private_pypi_core.workflow import (
         WorkflowStat,
         initialize_workflow,
         workflow_api_redirect_package_download_url,
@@ -19,8 +19,8 @@ from private_pypi.workflow import (
         workflow_api_simple_distrib,
         workflow_api_upload_package,
 )
-from private_pypi.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
-from private_pypi.web import LOGIN_HTML
+from private_pypi_core.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
+from private_pypi_core.web import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
 app.secret_key = get_secret_key()

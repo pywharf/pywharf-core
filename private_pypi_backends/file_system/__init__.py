@@ -1,4 +1,4 @@
-from private_pypi.backend import BackendRegistration
+from private_pypi_core.backend import BackendRegistration
 from private_pypi_backends.file_system.impl import (
         FILE_SYSTEM_TYPE,
         FileSystemConfig,

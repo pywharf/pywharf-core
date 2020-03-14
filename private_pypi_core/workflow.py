@@ -18,7 +18,7 @@ import psutil
 import redis_server
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from private_pypi.backend import (
+from private_pypi_core.backend import (
         DownloadIndexStatus,
         LocalPaths,
         PkgRef,
@@ -29,8 +29,8 @@ from private_pypi.backend import (
         UploadPackageStatus,
         BackendInstanceManager,
 )
-from private_pypi.job import dynamic_dramatiq
-from private_pypi.utils import locked_copy_file
+from private_pypi_core.job import dynamic_dramatiq
+from private_pypi_core.utils import locked_copy_file
 
 SHST = TypeVar('SHST')
 

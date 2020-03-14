@@ -12,7 +12,7 @@ import inspect
 
 # TODO: follows https://github.com/PyCQA/pylint/issues/1524
 from pydantic import BaseModel  # pylint: disable=no-name-in-module
-from private_pypi.utils import (
+from private_pypi_core.utils import (
         read_toml,
         write_toml,
         normalize_distribution_name,

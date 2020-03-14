@@ -7,12 +7,12 @@ import inspect
 import pytest
 import shortuuid
 
-from private_pypi.backend import (
+from private_pypi_core.backend import (
         BackendInstanceManager,
         PkgRepoConfig,
         PkgRepoSecret,
 )
-from private_pypi.workflow import (
+from private_pypi_core.workflow import (
         WorkflowStat,
         initialize_task_worker,
         build_workflow_stat,
