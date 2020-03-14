@@ -44,6 +44,7 @@ jobs:
 
  publish:
   needs: [ci]
+  if: github.ref == 'master'
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v2
