@@ -7,7 +7,7 @@ import importlib
 import os
 import pkgutil
 import traceback
-from typing import Any, Callable, Dict, List, Tuple, Iterable, TypeVar, Type, Optional
+from typing import Callable, Dict, List, Tuple, Iterable, TypeVar, Type, Optional
 import inspect
 
 # TODO: follows https://github.com/PyCQA/pylint/issues/1524
