@@ -16,6 +16,7 @@ from private_pypi_core.utils import (
         read_toml,
         write_toml,
         normalize_distribution_name,
+        now_timestamp,
         update_hash_algo_with_file,
 )
 
@@ -194,7 +195,7 @@ class BackendRegistration:
 class BackendInstanceManager:
 
     def __init__(self) -> None:
-        self._type_to_registration = {}
+        self._type_to_registration: Dict[str, Type[BackendRegistration]] = {}
 
         # Namespace package root.
         root_module = importlib.import_module('.', 'private_pypi_backends')
@@ -217,6 +218,8 @@ class BackendInstanceManager:
                 continue
 
             # Type validation.
+            assert issubclass(registration, BackendRegistration)
+
             assert registration.type
 
             assert issubclass(registration.pkg_repo_config_cls, PkgRepoConfig) \
@@ -232,6 +235,10 @@ class BackendInstanceManager:
                     and registration.pkg_ref_cls is not PkgRef
 
             self._type_to_registration[registration.type] = registration
+
+    @property
+    def all_registrations(self) -> Iterable[Type[BackendRegistration]]:
+        return self._type_to_registration.values()
 
     def _registration(self, **kwargs) -> Type[BackendRegistration]:
         assert 'type' in kwargs
@@ -299,12 +306,19 @@ class BackendInstanceManager:
 
         write_toml(path, dump)
 
-    def load_pkg_refs(self, path: str) -> List[PkgRef]:
-        return [self.create_pkg_ref(**struct) for struct in read_toml(path)['pkgs']]
+    def load_pkg_refs_and_mtime(self, path: str) -> Tuple[List[PkgRef], int]:
+        struct = read_toml(path)
+        pkg_refs = [self.create_pkg_ref(**struct_pkg_ref) for struct_pkg_ref in struct['pkgs']]
+        mtime = struct['mtime']
+        return pkg_refs, mtime
 
     @staticmethod
-    def dump_pkg_refs(path: str, pkg_refs: Iterable[PkgRef]) -> None:
-        write_toml(path, {'pkgs': [pkg_ref.dict() for pkg_ref in pkg_refs]})
+    def dump_pkg_refs_and_mtime(path: str, pkg_refs: Iterable[PkgRef]) -> None:
+        struct = {
+                'pkgs': [pkg_ref.dict() for pkg_ref in pkg_refs],
+                'mtime': now_timestamp(),
+        }
+        write_toml(path, struct)
 
 
 ##########
@@ -334,12 +348,22 @@ def record_error_if_raises(method: _METHOD) -> _METHOD:
 
 class PkgRepoIndex:
 
-    def __init__(self, pkg_refs) -> None:
+    def __init__(self, pkg_refs: List[PkgRef], mtime: int) -> None:
+        self._mtime = mtime
+
         self._distrib_to_pkg_refs: Dict[str, List[PkgRef]] = {}
         self._package_to_pkg_ref: Dict[str, PkgRef] = {}
 
         for pkg_ref in pkg_refs:
             self.add_pkg_ref(pkg_ref)
+
+    @property
+    def mtime(self) -> int:
+        return self._mtime
+
+    @property
+    def all_distributions(self) -> Iterable[str]:
+        return self._distrib_to_pkg_refs.keys()
 
     def add_pkg_ref(self, pkg_ref: PkgRef) -> None:
         if pkg_ref.package in self._package_to_pkg_ref:
@@ -350,10 +374,6 @@ class PkgRepoIndex:
 
         self._distrib_to_pkg_refs[pkg_ref.distrib].append(pkg_ref)
         self._package_to_pkg_ref[pkg_ref.package] = pkg_ref
-
-    @property
-    def all_distributions(self) -> Iterable[str]:
-        return self._distrib_to_pkg_refs.keys()
 
     def get_pkg_refs(self, query_distrib: str) -> Optional[List[PkgRef]]:
         distrib = normalize_distribution_name(query_distrib)

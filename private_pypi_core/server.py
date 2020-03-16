@@ -18,6 +18,7 @@ from private_pypi_core.workflow import (
         workflow_api_simple,
         workflow_api_simple_distrib,
         workflow_api_upload_package,
+        workflow_index_mtime,
 )
 from private_pypi_core.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
 from private_pypi_core.web import LOGIN_HTML
@@ -218,6 +219,18 @@ def legacy_api_upload_package():  # pylint: disable=too-many-return-statements
             cache_path,
     )
     return body, status_code
+
+
+@app.route('/index_mtime/', methods=['GET'])
+@login_required
+def index_mtime():
+    pkg_repo_secret, err_msg = load_secret_from_request(current_app.workflow_stat)
+    if pkg_repo_secret is None:
+        return err_msg, 401
+
+    name = load_name_from_request()
+    mtime, status_code = workflow_index_mtime(current_app.workflow_stat, name, pkg_repo_secret)
+    return mtime, status_code, {'Content-Type': 'text/plain'}
 
 
 def run_server(

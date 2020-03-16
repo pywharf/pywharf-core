@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "private-pypi-core"
-version = "0.1.3-alpha.3"
+version = "0.1.3-alpha.4"
 description = "A private PyPI server powered by flexible backends."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]

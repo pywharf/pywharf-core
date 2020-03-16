@@ -174,8 +174,9 @@ def build_workflow_stat(
                     f'index file={index_path} for name={pkg_repo_config.name} not exists')
 
         wstat.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
-        wstat.name_to_pkg_repo_index[pkg_repo_config.name] = \
-                PkgRepoIndex(wstat.backend_instance_manager.load_pkg_refs(index_path))
+
+        pkg_refs, remote_mtime = wstat.backend_instance_manager.load_pkg_refs_and_mtime(index_path)
+        wstat.name_to_pkg_repo_index[pkg_repo_config.name] = PkgRepoIndex(pkg_refs, remote_mtime)
 
     return wstat
 
@@ -292,7 +293,10 @@ def stop_all_children_processes():
         proc.kill()
 
 
-def initialize_task_worker():
+def initialize_task_worker(
+        dramatiq_processes: int = 1,
+        dramatiq_log_file: Optional[str] = None,
+):
     # All processes in the current process group will be terminated
     # with the lead process.
     os.setpgrp()
@@ -317,8 +321,21 @@ def initialize_task_worker():
     # Run worker.
     dramatiq_env = dict(os.environ)
     dramatiq_env['DYNAMIC_DRAMATIQ_REDIS_BROKER_PORT'] = redis_port
+
+    dramatiq_command = [
+            'dramatiq',
+            'private_pypi_core.job',
+            '--processes',
+            str(dramatiq_processes),
+    ]
+    if dramatiq_log_file:
+        dramatiq_command.extend([
+                '--log-file',
+                dramatiq_log_file,
+        ])
+
     subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-            ['dramatiq', 'private_pypi.job', '--processes', '1'],
+            dramatiq_command,
             # Share env.
             env=dramatiq_env,
             # Attach to the current process group.
@@ -347,7 +364,8 @@ def initialize_workflow(
     )
 
     # Initialize task queue related stuff.
-    initialize_task_worker()
+    initialize_task_worker(
+            dramatiq_log_file=join(wstat.root_local_paths.log, 'dramatiq_worker.log'))
 
     # Schedule sync_local_index_job.
     for name, pkg_repo_config in wstat.name_to_pkg_repo_config.items():
@@ -479,8 +497,10 @@ def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool
 
             if cur_mtime_size != last_mtime_size:
                 # Index has been updated, reload.
+                pkg_refs, remote_mtime = \
+                        wstat.backend_instance_manager.load_pkg_refs_and_mtime(index_path)
                 wstat.name_to_pkg_repo_index[pkg_repo_config.name] = \
-                        PkgRepoIndex(wstat.backend_instance_manager.load_pkg_refs(index_path))
+                        PkgRepoIndex(pkg_refs, remote_mtime)
 
     except Exception:  # pylint: disable=broad-except
         return False, traceback.format_exc()
@@ -665,3 +685,18 @@ def workflow_api_upload_package(
         raise ValueError('Invalid UploadPackageStatus')
 
     return result.message, status_code
+
+
+def workflow_index_mtime(
+        wstat: WorkflowStat,
+        name: str,
+        pkg_repo_secret: PkgRepoSecret,
+) -> Tuple[str, int]:
+    pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
+            wstat,
+            name,
+            pkg_repo_secret,
+    )
+    if pkg_repo_index is None:
+        return err_msg, status_code
+    return str(pkg_repo_index.mtime), 200

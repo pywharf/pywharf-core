@@ -143,7 +143,7 @@ def decrypt_base64_to_object(text):
         return None
 
 
-def _now_timestamp() -> int:
+def now_timestamp() -> int:
     return int(datetime.now().timestamp())
 
 
@@ -151,7 +151,7 @@ def encrypt_local_file_ref(path: str, filename: str, max_expired: int = 300):
     return encrypt_object_to_base64({
             'path': path,
             'filename': filename,
-            'timestamp': _now_timestamp(),
+            'timestamp': now_timestamp(),
             'max_expired': max_expired,
     })
 
@@ -168,7 +168,7 @@ def decrypt_local_file_ref(text):
     if not all((path, filename, timestamp, max_expired)):
         return False, None, None
 
-    if _now_timestamp() - timestamp >= max_expired:
+    if now_timestamp() - timestamp >= max_expired:
         return False, None, None
 
     return True, path, filename

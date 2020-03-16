@@ -168,7 +168,7 @@ class FileSystemPkgRepo(PkgRepo):
             # Update index.
             pkg_refs = self.collect_all_published_packages()
             tmp_index_path = join(self.local_paths.cache, f'tmp_index_{shortuuid.uuid()}.toml')
-            BackendInstanceManager.dump_pkg_refs(tmp_index_path, pkg_refs)
+            BackendInstanceManager.dump_pkg_refs_and_mtime(tmp_index_path, pkg_refs)
             self.upload_index(tmp_index_path)
 
         except TimeoutError:
@@ -267,7 +267,7 @@ class FileSystemPkgRepo(PkgRepo):
             with FileLock(self._index_lock_path, timeout=LOCK_TIMEOUT):
                 if not exists(self._index_path):
                     # Initialize index file.
-                    BackendInstanceManager.dump_pkg_refs(self._index_path, [])
+                    BackendInstanceManager.dump_pkg_refs_and_mtime(self._index_path, [])
                 shutil.copyfile(self._index_path, path)
             return DownloadIndexResult(status=DownloadIndexStatus.SUCCEEDED)
 
