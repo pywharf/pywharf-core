@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from dataclasses import dataclass
 from enum import Enum, auto
 import functools
 import hashlib
@@ -49,15 +48,16 @@ class UploadPackageResult(BaseModel):
     message: str = ''
 
 
-@dataclass
-class UploadPackageContext:
+class UploadPackageContext(BaseModel):
     filename: str
     path: str
-    meta: Optional[Dict[str, str]] = None
+    meta: Dict[str, str] = {}
     failed: bool = False
     message: str = ''
 
-    def __post_init__(self):
+    def __init__(self, **data):
+        super().__init__(**data)
+
         # Fill distribution name.
         if not self.meta.get('distrib'):
             name = self.meta.get('name')
