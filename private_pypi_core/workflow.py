@@ -736,17 +736,29 @@ def update_index(
                     cache=str(tempfile.mkdtemp(dir=root_tmp_dir)),
             ),
     )
+    print('pkg_repo_config:', pkg_repo.config.dict())
 
-    pkg_refs = pkg_repo.collect_all_published_packages()
+    # Collect published packages.
+    published_pkg_refs = pkg_repo.collect_all_published_packages()
+    print(f'{len(published_pkg_refs)} published packages collected.')
 
-    with tempfile.NamedTemporaryFile() as ntf:
-        bim.dump_pkg_refs_and_mtime(ntf.name, pkg_refs)
+    # Collect indexed packages.
+    with tempfile.NamedTemporaryFile(dir=pkg_repo.local_paths.cache) as ntf:
+        result = pkg_repo.download_index(ntf.name)
+        if result.status != DownloadIndexStatus.SUCCEEDED:
+            print(f'[ERROR] "{name}" failed to download index:\n' + result.message)
 
-        if pkg_repo.local_index_is_up_to_date(ntf.name):
-            print("No change, skip upload.")
+        indexed_pkg_refs, _ = bim.load_pkg_refs_and_mtime(ntf.name)
+        print(f'{len(indexed_pkg_refs)} indexed packages collected')
 
-        else:
-            print("Uploading...")
+    # Check if update is needed.
+    if published_pkg_refs == indexed_pkg_refs:
+        print("No change, skip update.")
+
+    else:
+        print("Uploading...")
+        with tempfile.NamedTemporaryFile(dir=pkg_repo.local_paths.cache) as ntf:
+            bim.dump_pkg_refs_and_mtime(ntf.name, published_pkg_refs)
             result = pkg_repo.upload_index(ntf.name)
             if result.status != UploadIndexStatus.SUCCEEDED:
                 raise RuntimeError(result.message)
