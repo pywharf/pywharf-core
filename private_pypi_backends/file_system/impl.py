@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import hashlib
 from os import makedirs
 from os.path import isdir, join, exists
 import pathlib
@@ -51,11 +50,6 @@ class FileSystemSecret(PkgRepoSecret):
     @property
     def token(self) -> str:
         return self.raw
-
-    def secret_hash(self) -> str:
-        sha256_algo = hashlib.sha256()
-        sha256_algo.update(self.raw.encode())
-        return f'fs-{sha256_algo.hexdigest()}'
 
 
 class FileSystemPkgRef(PkgRef):

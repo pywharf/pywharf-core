@@ -39,6 +39,10 @@ def create_random_file(path, size):
     return path
 
 
+def test_admin_secret_as_env(function_repo_admin_secret_as_env):
+    assert function_repo_admin_secret_as_env
+
+
 def test_upload_with_write_secret(session_repo, tmpdir, update_repo_index):
     distrib = shortuuid.uuid()
     filename = f'{distrib}-1.0-py3-none-any.whl'
@@ -111,7 +115,7 @@ class TestKit:
             caller_globals[func.__name__] = func
             return func
 
-        def _create_repo_for_test(create_tmpdir):
+        def _create_repo_for_test(create_tmpdir, set_env, admin_secret_as_env=False):
             config_folder = create_tmpdir('config')
 
             pkg_repo_config, read_secret, write_secret = cls.setup_pkg_repo()
@@ -119,7 +123,20 @@ class TestKit:
             admin_pkg_repo_secret_file = str(config_folder.join('admin_secret.toml'))
 
             BackendInstanceManager.dump_pkg_repo_configs(pkg_repo_config_file, [pkg_repo_config])
-            BackendInstanceManager.dump_pkg_repo_secrets(admin_pkg_repo_secret_file, [write_secret])
+
+            if not admin_secret_as_env:
+                BackendInstanceManager.dump_pkg_repo_secrets(
+                        admin_pkg_repo_secret_file,
+                        [read_secret],
+                )
+            else:
+                env = shortuuid.uuid()
+                BackendInstanceManager.dump_pkg_repo_secrets(
+                        admin_pkg_repo_secret_file,
+                        [read_secret],
+                        {pkg_repo_config.name.lower(): env},
+                )
+                set_env(env, read_secret.raw)
 
             root_folder = str(create_tmpdir('root'))
 
@@ -144,18 +161,41 @@ class TestKit:
         @inject_to_caller
         @pytest.fixture(scope='session')
         def session_repo(tmpdir_factory):  # pylint: disable=unused-variable
-            yield _create_repo_for_test(tmpdir_factory.mktemp)
+            from _pytest.monkeypatch import MonkeyPatch
+            monkeypatch = MonkeyPatch()
+
+            yield _create_repo_for_test(
+                    tmpdir_factory.mktemp,
+                    monkeypatch.setenv,
+                    admin_secret_as_env=False,
+            )
+
+            monkeypatch.undo()
 
         @inject_to_caller
         @pytest.fixture(scope='function')
-        def function_repo(tmpdir):  # pylint: disable=unused-variable
-            yield _create_repo_for_test(tmpdir.mkdir)
+        def function_repo(tmpdir, monkeypatch):  # pylint: disable=unused-variable
+            yield _create_repo_for_test(
+                    tmpdir.mkdir,
+                    monkeypatch.setenv,
+                    admin_secret_as_env=False,
+            )
+
+        @inject_to_caller
+        @pytest.fixture(scope='function')
+        def function_repo_admin_secret_as_env(tmpdir, monkeypatch):  # pylint: disable=unused-variable
+            yield _create_repo_for_test(
+                    tmpdir.mkdir,
+                    monkeypatch.setenv,
+                    admin_secret_as_env=True,
+            )
 
         @inject_to_caller
         @pytest.fixture(scope='function')
         def update_repo_index():  # pylint: disable=unused-variable
             yield cls.update_repo_index
 
+        inject_to_caller(test_admin_secret_as_env)
         inject_to_caller(test_upload_with_write_secret)
         inject_to_caller(test_upload_with_read_secret)
 

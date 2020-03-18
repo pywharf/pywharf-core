@@ -11,6 +11,7 @@ import inspect
 
 # TODO: follows https://github.com/PyCQA/pylint/issues/1524
 from pydantic import BaseModel  # pylint: disable=no-name-in-module
+
 from private_pypi_core.utils import (
         read_toml,
         write_toml,
@@ -119,9 +120,10 @@ class PkgRepoSecret(BaseModel):
     name: str
     raw: str
 
-    @abstractmethod
     def secret_hash(self) -> str:
-        pass
+        sha256_algo = hashlib.sha256()
+        sha256_algo.update(self.raw.encode())
+        return f'{self.name}-{sha256_algo.hexdigest()}'
 
 
 class PkgRef(BaseModel):
@@ -249,7 +251,29 @@ class BackendInstanceManager:
         return self._registration(**kwargs).pkg_repo_config_cls(**kwargs)
 
     def create_pkg_repo_secret(self, **kwargs) -> PkgRepoSecret:
-        return self._registration(**kwargs).pkg_repo_secret_cls(**kwargs)
+        name = kwargs.get('name')
+        type_ = kwargs.get('type')
+        if not name or not type_:
+            raise ValueError(f'name or type not set. kwargs={kwargs}')
+
+        raw = kwargs.get('raw')
+        env = kwargs.get('env')
+        if raw and env:
+            raise ValueError(f'Can either set raw or env, but not both. kwargs={kwargs}')
+
+        struct = {'name': name, 'type': type_}
+        if raw:
+            # Harcoded secret.
+            struct['raw'] = raw
+        else:
+            # Load from the environment variable.
+            assert env
+            raw_from_env = os.getenv(env)
+            if not raw_from_env:
+                raise ValueError(f'{env} is not set. name={name}, struct={struct}')
+            struct['raw'] = raw_from_env
+
+        return self._registration(type=type_).pkg_repo_secret_cls(**struct)
 
     def create_pkg_repo(self, **kwargs) -> PkgRepo:
         return self._registration(**kwargs).pkg_repo_cls(**kwargs)
@@ -295,14 +319,25 @@ class BackendInstanceManager:
         return name_to_pkg_repo_secret
 
     @staticmethod
-    def dump_pkg_repo_secrets(path: str, pkg_repo_secrets: Iterable[PkgRepoSecret]) -> None:
+    def dump_pkg_repo_secrets(
+            path: str,
+            pkg_repo_secrets: Iterable[PkgRepoSecret],
+            name_to_env: Optional[Dict[str, str]] = None,
+    ) -> None:
         dump = {}
 
         for pkg_repo_config in pkg_repo_secrets:
             struct = pkg_repo_config.dict()
-            name = struct.pop('name')
-            name = name.lower()
-            dump[name] = struct
+            name = struct['name'].lower()
+
+            dump_struct = {'type': struct['type']}
+            if not name_to_env:
+                dump_struct['raw'] = struct['raw']
+            else:
+                assert name in name_to_env
+                dump_struct['env'] = name_to_env[name]
+
+            dump[name] = dump_struct
 
         write_toml(path, dump)
 
