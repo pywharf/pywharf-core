@@ -64,7 +64,7 @@ jobs:
 
     - name: Publish to PyPI.
       run: |
-        poetry build
+        poetry build -f wheel
         twine upload --skip-existing dist/*
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
