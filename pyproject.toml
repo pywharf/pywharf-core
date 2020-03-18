@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "private-pypi-core"
-version = "0.1.3-alpha.5"
+version = "0.1.3-alpha.6"
 description = "A private PyPI server powered by flexible backends."
 license = "MIT"
 authors = ["huntzhan <huntzhan.dev@gmail.com>"]
@@ -43,6 +43,7 @@ twine = "^3.1.1"
 
 [tool.poetry.scripts]
 private_pypi_server = "private_pypi_core.server:run_server_cli"
+private_pypi_update_index = "private_pypi_core.workflow:update_index_cli"
 
 [build-system]
 requires = ["poetry>=0.12"]

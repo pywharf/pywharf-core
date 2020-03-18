@@ -8,15 +8,17 @@ import os
 from os.path import abspath, exists, getmtime, getsize, join
 import subprocess
 import socket
+import tempfile
 import threading
 import traceback
-from typing import DefaultDict, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import DefaultDict, Dict, Generic, List, Optional, Tuple, TypeVar, Any
 
 from filelock import FileLock
 from jinja2 import Template
 import psutil
 import redis_server
 from apscheduler.schedulers.background import BackgroundScheduler
+import fire
 
 from private_pypi_core.backend import (
         DownloadIndexStatus,
@@ -27,6 +29,7 @@ from private_pypi_core.backend import (
         PkgRepoSecret,
         PkgRepoIndex,
         UploadPackageStatus,
+        UploadIndexStatus,
         BackendInstanceManager,
 )
 from private_pypi_core.job import dynamic_dramatiq
@@ -700,3 +703,53 @@ def workflow_index_mtime(
     if pkg_repo_index is None:
         return err_msg, status_code
     return str(pkg_repo_index.mtime), 200
+
+
+def update_index(
+        type: str,  # pylint: disable=redefined-builtin
+        name: str,
+        secret: Optional[str] = None,
+        secret_env: Optional[str] = None,
+        **config_kwargs: Any,
+):
+    bim = BackendInstanceManager()
+
+    root_tmp_dir = str(tempfile.mkdtemp())
+    pkg_repo = bim.create_pkg_repo(
+            type=type,
+            config=bim.create_pkg_repo_config(
+                    type=type,
+                    name=name,
+                    **config_kwargs,
+            ),
+            secret=bim.create_pkg_repo_secret(
+                    type=type,
+                    name=name,
+                    raw=secret,
+                    env=secret_env,
+            ),
+            local_paths=LocalPaths(
+                    index=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+                    log=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+                    lock=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+                    job=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+                    cache=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+            ),
+    )
+
+    pkg_refs = pkg_repo.collect_all_published_packages()
+
+    with tempfile.NamedTemporaryFile() as ntf:
+        bim.dump_pkg_refs_and_mtime(ntf.name, pkg_refs)
+
+        if pkg_repo.local_index_is_up_to_date(ntf.name):
+            print("No change, skip upload.")
+
+        else:
+            print("Uploading...")
+            result = pkg_repo.upload_index(ntf.name)
+            if result.status != UploadIndexStatus.SUCCEEDED:
+                raise RuntimeError(result.message)
+
+
+update_index_cli = lambda: fire.Fire(update_index)  # pylint: disable=invalid-name
