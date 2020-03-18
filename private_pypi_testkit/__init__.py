@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 import inspect
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 import shortuuid
 
 from private_pypi_core.backend import (
@@ -161,7 +162,6 @@ class TestKit:
         @inject_to_caller
         @pytest.fixture(scope='session')
         def session_repo(tmpdir_factory):  # pylint: disable=unused-variable
-            from _pytest.monkeypatch import MonkeyPatch
             monkeypatch = MonkeyPatch()
 
             yield _create_repo_for_test(
