@@ -17,7 +17,8 @@ from filelock import FileLock
 from jinja2 import Template
 import psutil
 import redis_server
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.background import BackgroundScheduler as _BackgroundScheduler
+from apscheduler.schedulers import SchedulerNotRunningError
 import fire
 
 from private_pypi_core.backend import (
@@ -59,6 +60,15 @@ def get_mtime_size(path: str) -> Tuple[datetime, int]:
     return mtime, size
 
 
+class BackgroundScheduler(_BackgroundScheduler):
+
+    def __del__(self):
+        try:
+            self.shutdown()
+        except SchedulerNotRunningError:
+            pass
+
+
 @dataclass
 class WorkflowStat:
     # Backend reflection.
@@ -68,6 +78,7 @@ class WorkflowStat:
     name_to_pkg_repo_config: Dict[str, PkgRepoConfig]
 
     # Local paths.
+    root_folder: str
     root_local_paths: LocalPaths
     name_to_local_paths: Dict[str, LocalPaths]
 
@@ -93,23 +104,28 @@ class WorkflowStat:
 
 
 def build_workflow_stat(
-        pkg_repo_config_file: str,
-        admin_pkg_repo_secret_file: Optional[str],
         root_folder: str,
+        pkg_repo_config_file: Optional[str],
+        admin_pkg_repo_secret_file: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
 ) -> WorkflowStat:
     backend_instance_manager = BackendInstanceManager()
 
     # Config.
-    if not exists(pkg_repo_config_file):
-        raise FileNotFoundError(f'pkg_repo_config_file={pkg_repo_config_file} not exists.')
-
-    name_to_pkg_repo_config = backend_instance_manager.load_pkg_repo_configs(pkg_repo_config_file)
+    name_to_pkg_repo_config = {}
+    if pkg_repo_config_file is not None:
+        if not exists(pkg_repo_config_file):
+            raise FileNotFoundError(f'pkg_repo_config_file={pkg_repo_config_file} not exists.')
+        name_to_pkg_repo_config = \
+                backend_instance_manager.load_pkg_repo_configs(pkg_repo_config_file)
 
     # Admin secret.
     name_to_admin_pkg_repo_secret = None
     if admin_pkg_repo_secret_file is not None:
+        if not exists(admin_pkg_repo_secret_file):
+            raise FileNotFoundError(
+                    f'admin_pkg_repo_secret_file={admin_pkg_repo_secret_file} not exists.')
         name_to_admin_pkg_repo_secret = \
                 backend_instance_manager.load_pkg_repo_secrets(admin_pkg_repo_secret_file)
 
@@ -148,6 +164,7 @@ def build_workflow_stat(
     wstat = WorkflowStat(
             backend_instance_manager=backend_instance_manager,
             name_to_pkg_repo_config=name_to_pkg_repo_config,
+            root_folder=root_folder,
             root_local_paths=root_local_paths,
             name_to_local_paths=name_to_local_paths,
             name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
@@ -252,9 +269,9 @@ def sync_local_index_job(
         name: str,
 ):
     wstat = build_workflow_stat(
+            root_folder=root_folder,
             pkg_repo_config_file=pkg_repo_config_file,
             admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-            root_folder=root_folder,
             auth_read_expires=0,
             auth_write_expires=0,
     )
@@ -302,12 +319,7 @@ def initialize_task_worker(
 ):
     # All processes in the current process group will be terminated
     # with the lead process.
-    try:
-        os.setpgrp()
-    except PermissionError:
-        # TODO: this happens in github action.
-        pass
-
+    os.setpgrp()
     atexit.register(stop_all_children_processes)
 
     # Run Redis.
@@ -355,25 +367,27 @@ def initialize_task_worker(
 
 
 def initialize_workflow(
-        pkg_repo_config_file: str,
-        admin_pkg_repo_secret_file: Optional[str],
         root_folder: str,
+        pkg_repo_config_file: Optional[str],
+        admin_pkg_repo_secret_file: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
+        enable_task_worker_initialization: bool = False,
 ) -> WorkflowStat:
     # Initialize workflow state.
     # NOTE: backend_instance_manager must be created before broker setup.
     wstat = build_workflow_stat(
+            root_folder=abspath(root_folder),
             pkg_repo_config_file=pkg_repo_config_file,
             admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-            root_folder=abspath(root_folder),
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
     )
 
-    # Initialize task queue related stuff.
-    initialize_task_worker(
-            dramatiq_log_file=join(wstat.root_local_paths.log, 'dramatiq_worker.log'))
+    if enable_task_worker_initialization:
+        # Initialize task queue related stuff.
+        initialize_task_worker(
+                dramatiq_log_file=join(wstat.root_local_paths.log, 'dramatiq_worker.log'))
 
     # Schedule sync_local_index_job.
     for name, pkg_repo_config in wstat.name_to_pkg_repo_config.items():

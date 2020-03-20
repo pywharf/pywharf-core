@@ -8,15 +8,15 @@
 Run the private-pypi server.
 
 SYNOPSIS
-    private_pypi_server CONFIG ROOT <flags>
+    private_pypi_server ROOT <flags>
 
 POSITIONAL ARGUMENTS
-    CONFIG (str):
-        Path to the package repositories config.
     ROOT (str):
         Path to the root folder.
 
 FLAGS
+    --config (Optional[str]):
+        Path to the package repository config.
     --admin_secret (Optional[str]):
         Path to the admin secrets config with read/write permission.
         This field is required for local index synchronization.
