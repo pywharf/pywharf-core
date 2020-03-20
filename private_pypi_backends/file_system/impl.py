@@ -152,7 +152,7 @@ class FileSystemPkgRepo(PkgRepo):
 
                 if exists(pkg_path) and exists(pkg_meta_path):
                     ctx.failed = True
-                    ctx.message = 'Package exists.'
+                    ctx.message = 'Package already exists.'
                     return
 
                 # Save package & meta.
@@ -184,7 +184,13 @@ class FileSystemPkgRepo(PkgRepo):
             if ctx.failed:
                 break
 
-        status = UploadPackageStatus.SUCCEEDED if not ctx.failed else UploadPackageStatus.FAILED
+        if not ctx.failed:
+            status = UploadPackageStatus.SUCCEEDED
+        elif 'already exist' in ctx.message:
+            status = UploadPackageStatus.CONFLICT
+        else:
+            status = UploadPackageStatus.BAD_REQUEST
+
         return UploadPackageResult(status=status, message=ctx.message)
 
     def collect_all_published_packages(self) -> List[PkgRef]:

@@ -41,7 +41,8 @@ class LocalPaths(BaseModel):
 
 class UploadPackageStatus(Enum):
     SUCCEEDED = auto()
-    FAILED = auto()
+    CONFLICT = auto()
+    BAD_REQUEST = auto()
 
 
 class UploadPackageResult(BaseModel):

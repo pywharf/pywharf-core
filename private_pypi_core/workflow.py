@@ -704,10 +704,14 @@ def workflow_api_upload_package(
         return err_msg, 401
 
     result = pkg_repo.upload_package(filename, meta, path)
-    if result.status == UploadPackageStatus.FAILED:
-        status_code = 401
-    elif result.status == UploadPackageStatus.SUCCEEDED:
+
+    if result.status == UploadPackageStatus.SUCCEEDED:
         status_code = 200
+    elif result.status == UploadPackageStatus.CONFLICT:
+        # https://github.com/pypa/twine/blob/efd0e4402c9f14c3b2ad3359c861a3112b8c6b36/twine/commands/upload.py#L36-L37
+        status_code = 409
+    elif result.status == UploadPackageStatus.BAD_REQUEST:
+        status_code = 400
     else:
         raise ValueError('Invalid UploadPackageStatus')
 

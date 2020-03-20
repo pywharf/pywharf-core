@@ -70,8 +70,8 @@ category = "dev"
 description = "An easy safelist-based HTML-sanitizing tool."
 name = "bleach"
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "3.1.1"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+version = "3.1.3"
 
 [package.dependencies]
 six = ">=1.9.0"
@@ -299,7 +299,7 @@ description = "Store and access your passwords safely."
 name = "keyring"
 optional = false
 python-versions = ">=3.6"
-version = "21.1.1"
+version = "21.2.0"
 
 [package.dependencies]
 SecretStorage = ">=3"
@@ -790,8 +790,8 @@ attrs = [
     {file = "attrs-19.3.0.tar.gz", hash = "sha256:f7b7ce16570fe9965acd6d30101a28f62fb4a7f9e926b3bbc9b61f8b04247e72"},
 ]
 bleach = [
-    {file = "bleach-3.1.1-py2.py3-none-any.whl", hash = "sha256:44f69771e2ac81ff30d929d485b7f9919f3ad6d019b6b20c74f3b8687c3f70df"},
-    {file = "bleach-3.1.1.tar.gz", hash = "sha256:aa8b870d0f46965bac2c073a93444636b0e1ca74e9777e34f03dd494b8a59d48"},
+    {file = "bleach-3.1.3-py2.py3-none-any.whl", hash = "sha256:53165a6596e7899c4338d847315fec508110a53bd6fd15c127c2e0d0860264e3"},
+    {file = "bleach-3.1.3.tar.gz", hash = "sha256:f8dfd8a7e26443e986c4e44df31870da8e906ea61096af06ba5d5cc2d519842a"},
 ]
 certifi = [
     {file = "certifi-2019.11.28-py2.py3-none-any.whl", hash = "sha256:017c25db2a153ce562900032d5bc68e9f191e44e9a0f762f373977de9df1fbb3"},
@@ -910,8 +910,8 @@ jinja2 = [
     {file = "Jinja2-2.11.1.tar.gz", hash = "sha256:93187ffbc7808079673ef52771baa950426fd664d3aad1d0fa3e95644360e250"},
 ]
 keyring = [
-    {file = "keyring-21.1.1-py3-none-any.whl", hash = "sha256:ebce8a4acfcabbcdfdcae2fc58571cebf11f71262cca898edceef89cdc891898"},
-    {file = "keyring-21.1.1.tar.gz", hash = "sha256:b7bdfb1978cfdbabec63a3d389ad60242e7ffe9d739cae00760408c4f07d2c13"},
+    {file = "keyring-21.2.0-py3-none-any.whl", hash = "sha256:8179b1cdcdcbc221456b5b74e6b7cfa06f8dd9f239eb81892166d9223d82c5ba"},
+    {file = "keyring-21.2.0.tar.gz", hash = "sha256:197fd5903901030ef7b82fe247f43cfed2c157a28e7747d1cfcf4bc5e699dd03"},
 ]
 lazy-object-proxy = [
     {file = "lazy-object-proxy-1.4.3.tar.gz", hash = "sha256:f3900e8a5de27447acbf900b4750b0ddfd7ec1ea7fbaf11dfa911141bc522af0"},
@@ -1094,6 +1094,15 @@ redis-server = [
     {file = "redis_server-5.0.7-202003070747-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:e3929208072428d1c901fc6447bba3d09c843e624fbdcfe84fc9839d6795710a"},
     {file = "redis_server-5.0.7-202003070747-cp38-cp38-manylinux2010_i686.whl", hash = "sha256:23d7dada2ae4d602568f947297ef034a7806ad571bfd3b5a6844bb7c23a4678b"},
     {file = "redis_server-5.0.7-202003070747-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:bd46762c3e8df99524a1c15ee717437d0e51692f677980c3532bd8f8781f8cf1"},
+    {file = "redis_server-5.0.7-202003071029-py3-none-macosx_10_15_x86_64.whl", hash = "sha256:a7da2461bdd8a2cb04937d3c71459dad4c8b4ced386c7c741cda258b1d0549f5"},
+    {file = "redis_server-5.0.7-202003071030-cp35-cp35m-manylinux2010_i686.whl", hash = "sha256:64adb22f7d0c4788bcd59fda6b84c504d49c5208b4a729521c970dba9154d87f"},
+    {file = "redis_server-5.0.7-202003071030-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:4500c57d802b4d8cae9307b3b7a005dacfd20303666352063059208b4f71732c"},
+    {file = "redis_server-5.0.7-202003071030-cp36-cp36m-manylinux2010_i686.whl", hash = "sha256:ce7833596ef52ca4a79c10377314d328eb59f11fe8d740679006a8bb2ef573cc"},
+    {file = "redis_server-5.0.7-202003071030-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:9f5a499b5232b3e6e75bac28fd1681f6cd56e924890ce9c4987ea714ea5afbbe"},
+    {file = "redis_server-5.0.7-202003071030-cp37-cp37m-manylinux2010_i686.whl", hash = "sha256:b2fee7cd16e1aa2419452c7574993819159d53a8089a64df6912549e1bf03155"},
+    {file = "redis_server-5.0.7-202003071030-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:e1c02d7d7d82cd77a3f3ed7a831f09bcac4da9e1677f306017297766e3fab137"},
+    {file = "redis_server-5.0.7-202003071030-cp38-cp38-manylinux2010_i686.whl", hash = "sha256:b09c207d8224ce8f73f064b30ee77ddc7e9b09ba1ff935c555294d999b854d0b"},
+    {file = "redis_server-5.0.7-202003071030-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:fe3f95337638a5ecf16dfbe76fe4a87c84d09ca22a8cf0f9b7dfdc6437fdf13f"},
 ]
 requests = [
     {file = "requests-2.23.0-py2.py3-none-any.whl", hash = "sha256:43999036bfa82904b6af1d99e4882b560e5e2c68e5c4b0aa03b655f3d7d73fee"},
