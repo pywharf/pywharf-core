@@ -302,7 +302,12 @@ def initialize_task_worker(
 ):
     # All processes in the current process group will be terminated
     # with the lead process.
-    os.setpgrp()
+    try:
+        os.setpgrp()
+    except PermissionError:
+        # TODO: this happens in github action.
+        pass
+
     atexit.register(stop_all_children_processes)
 
     # Run Redis.
