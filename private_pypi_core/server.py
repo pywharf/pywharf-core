@@ -254,8 +254,8 @@ def reload():
 
     current_app.workflow_stat = initialize_workflow(
             root_folder=pre_wstat.root_folder,
-            pkg_repo_config_file=config_file,
-            admin_pkg_repo_secret_file=admin_secret_file,
+            pkg_repo_config_file_or_text=config_file,
+            admin_pkg_repo_secret_file_or_text=admin_secret_file,
             auth_read_expires=pre_wstat.auth_read_expires,
             auth_write_expires=pre_wstat.auth_write_expires,
             enable_task_worker_initialization=False,
@@ -267,6 +267,7 @@ def run_server(
         root: str,
         config: Optional[str] = None,
         admin_secret: Optional[str] = None,
+        config_or_admin_secret_can_be_text: bool = False,
         auth_read_expires: int = 3600,
         auth_write_expires: int = 300,
         extra_index_url: str = 'https://pypi.org/simple/',
@@ -283,10 +284,11 @@ def run_server(
         # Init.
         current_app.workflow_stat = initialize_workflow(
                 root_folder=root,
-                pkg_repo_config_file=config,
-                admin_pkg_repo_secret_file=admin_secret,
+                pkg_repo_config_file_or_text=config,
+                admin_pkg_repo_secret_file_or_text=admin_secret,
                 auth_read_expires=auth_read_expires,
                 auth_write_expires=auth_write_expires,
+                config_or_admin_secret_can_be_text=config_or_admin_secret_can_be_text,
                 enable_task_worker_initialization=True,
         )
         server_logging_path = join(

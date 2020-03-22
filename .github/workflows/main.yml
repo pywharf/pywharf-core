@@ -1,71 +1,70 @@
-name: ci
+name: build-and-push
 
 on:
- push:
+  push:
 
 jobs:
 
- ci:
-  runs-on: ubuntu-latest
-  strategy:
-    matrix:
-      python_version: ['3.7', '3.8']
-  steps:
-    - uses: actions/checkout@v2
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python_version: ["3.7", "3.8"]
 
-    - name: Setup python
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python_version }}
+    steps:
+      - uses: actions/checkout@v2
 
-    - name: Setup pip/poetry
-      run: |
-        pip install -U pip poetry
-        pip --version
-        poetry --version
-        poetry config virtualenvs.create false
+      - name: Setup python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python_version }}
 
-    - name: Install.
-      run: poetry install
+      - name: Setup pip/poetry
+        run: |
+          pip install -U pip poetry
+          poetry config virtualenvs.create false
 
-    - name: Test.
-      run: pytest
+      - name: Install.
+        run: poetry install
 
-    - name: Lint.
-      run: |
-        pylint private_pypi_core
-        yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_core
+      - name: Test.
+        run: pytest
 
-        pylint private_pypi_backends
-        yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_backends
+      - name: Lint.
+        run: |
+          pylint private_pypi_core
+          yapf -d -r --style="$YAPF_STYLE" private_pypi_core
 
-        pylint private_pypi_testkit
-        yapf -d -r --style='{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}' private_pypi_testkit
+          pylint private_pypi_backends
+          yapf -d -r --style="$YAPF_STYLE" private_pypi_backends
 
- publish:
-  needs: [ci]
-  if: github.ref == 'refs/heads/master'
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v2
+          pylint private_pypi_testkit
+          yapf -d -r --style="$YAPF_STYLE" private_pypi_testkit
+        env:
+          YAPF_STYLE: '{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}'
 
-    - name: Setup python
-      uses: actions/setup-python@v1
-      with:
-        python-version: '3.8'
+  publish:
+    needs: [ci]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
 
-    - name: Setup pip/poetry
-      run: |
-        pip install -U pip poetry twine
-        pip --version
-        poetry --version
-        twine --version
-        poetry config virtualenvs.create false
+    steps:
+      - uses: actions/checkout@v2
 
-    - name: Publish to PyPI.
-      run: |
-        poetry build -f wheel
-        twine upload --skip-existing dist/*
-      env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      - name: Setup python
+        uses: actions/setup-python@v1
+        with:
+          python-version: "3.8"
+
+      - name: Setup pip/poetry
+        run: |
+          pip install -U pip poetry twine
+          poetry config virtualenvs.create false
+
+      - name: Publish to PyPI.
+        run: |
+          poetry build -f wheel
+          twine upload --skip-existing dist/*
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}

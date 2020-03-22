@@ -16,11 +16,17 @@ POSITIONAL ARGUMENTS
 
 FLAGS
     --config (Optional[str]):
-        Path to the package repository config.
+        Path to the package repository config,
+        or the file content if --config_or_admin_secret_can_be_text is set.
+        Defaults to None.
     --admin_secret (Optional[str]):
         Path to the admin secrets config with read/write permission.
+        or the file content if --config_or_admin_secret_can_be_text is set.
         This field is required for local index synchronization.
         Defaults to None.
+    --config_or_admin_secret_can_be_text (Optional[bool]):
+        Enable passing the file content to --config or --admin_secret.
+        Defaults to False.
     --auth_read_expires (int):
         The expiration time (in seconds) for read authentication.
         Defaults to 3600.

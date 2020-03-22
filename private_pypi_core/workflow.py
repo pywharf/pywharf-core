@@ -371,14 +371,43 @@ def initialize_task_worker(
     )
 
 
+def _prepare_file(
+        root_folder: str,
+        file_or_text: Optional[str],
+        dst_filename: str,
+) -> Optional[str]:
+    file = file_or_text
+    if file_or_text and not exists(file_or_text):
+        file = join(root_folder, dst_filename)
+        with open(file, 'w') as fout:
+            fout.write(file_or_text)
+    return file
+
+
 def initialize_workflow(
         root_folder: str,
-        pkg_repo_config_file: Optional[str],
-        admin_pkg_repo_secret_file: Optional[str],
+        pkg_repo_config_file_or_text: Optional[str],
+        admin_pkg_repo_secret_file_or_text: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
+        config_or_admin_secret_can_be_text: bool = False,
         enable_task_worker_initialization: bool = False,
 ) -> WorkflowStat:
+    if config_or_admin_secret_can_be_text:
+        pkg_repo_config_file = _prepare_file(
+                root_folder,
+                pkg_repo_config_file_or_text,
+                'config.toml',
+        )
+        admin_pkg_repo_secret_file = _prepare_file(
+                root_folder,
+                admin_pkg_repo_secret_file_or_text,
+                'admin_secret.toml',
+        )
+    else:
+        pkg_repo_config_file = pkg_repo_config_file_or_text
+        admin_pkg_repo_secret_file = admin_pkg_repo_secret_file_or_text
+
     # Initialize workflow state.
     # NOTE: backend_instance_manager must be created before broker setup.
     wstat = build_workflow_stat(
