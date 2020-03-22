@@ -233,31 +233,40 @@ def index_mtime():
     return mtime, status_code, {'Content-Type': 'text/plain'}
 
 
-@app.route('/reload/', methods=['POST'])
-def reload():
-    if 'multipart/form-data' not in request.content_type:
-        return 'Please post content-type=multipart/form-data.', 405
+def _load_file_content_for_initialization(key) -> Tuple[bool, str]:
+    if key in request.form and key in request.files:
+        return False, f'{key} in both form and files.'
+    elif key not in request.form and key not in request.files:
+        return False, f'{key} not in form and files.'
 
-    if 'config.toml' not in request.files:
-        return 'File not found.', 405
-    if 'admin_secret.toml' not in request.files:
-        return 'File not found.', 405
+    if key in request.form:
+        return True, request.form[key]
+    else:
+        return True, request.files[key].read()
+
+
+@app.route('/initialize/', methods=['POST'])
+def initialize():
+    if 'multipart/form-data' not in request.content_type \
+            and 'application/x-www-form-urlencoded' not in request.content_type:
+        return 'content_type should be content-type=multipart/form-data or application/x-www-form-urlencoded.', 405
+
+    passed, config_text = _load_file_content_for_initialization('config')
+    if not passed:
+        return config_text, 405
+
+    passed, admin_secret_text = _load_file_content_for_initialization('admin_secret')
+    if not passed:
+        return admin_secret_text, 405
 
     pre_wstat = current_app.workflow_stat
-    current_app.workflow_stat = None
-
-    config_file = join(pre_wstat.root_folder, 'config.toml')
-    request.files['config.toml'].save(config_file)
-
-    admin_secret_file = join(pre_wstat.root_folder, 'admin_secret.toml')
-    request.files['admin_secret.toml'].save(admin_secret_file)
-
     current_app.workflow_stat = initialize_workflow(
             root_folder=pre_wstat.root_folder,
-            pkg_repo_config_file_or_text=config_file,
-            admin_pkg_repo_secret_file_or_text=admin_secret_file,
+            pkg_repo_config_file_or_text=config_text,
+            admin_pkg_repo_secret_file_or_text=admin_secret_text,
             auth_read_expires=pre_wstat.auth_read_expires,
             auth_write_expires=pre_wstat.auth_write_expires,
+            config_or_admin_secret_can_be_text=True,
             enable_task_worker_initialization=False,
     )
     return 'Done', 200
