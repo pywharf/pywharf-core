@@ -143,7 +143,7 @@ def pep503_api_simple_distrib(distrib):
 
     if status_code == 404 and app.config['EXTRA_INDEX_URL'] != '/':
         # Redirect to extra index if not found.
-        return redirect(app.config['EXTRA_INDEX_URL'] + f'/{distrib}/')
+        return redirect(app.config['EXTRA_INDEX_URL'] + f'{distrib}/')
 
     return body, status_code
 
