@@ -45,7 +45,7 @@ FLAGS
         Defaults to '0.0.0.0'.
     --port (int):
         The port to bind to.
-        Defaults to 8080.
+        Defaults to 8888.
     **waitress_options (Dict[str, Any]):
         Optional arguments that `waitress.serve` takes.
         Details in https://docs.pylonsproject.org/projects/waitress/en/stable/arguments.html.
