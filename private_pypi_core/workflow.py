@@ -109,6 +109,7 @@ def build_workflow_stat(
         admin_pkg_repo_secret_file: Optional[str],
         auth_read_expires: int,
         auth_write_expires: int,
+        enable_sync_local_index: bool = False,
 ) -> WorkflowStat:
     backend_instance_manager = BackendInstanceManager()
 
@@ -181,7 +182,7 @@ def build_workflow_stat(
             scheduler=BackgroundScheduler(),
     )
 
-    if name_to_admin_pkg_repo_secret:
+    if enable_sync_local_index and name_to_admin_pkg_repo_secret:
         passed, log = sync_local_index(wstat)
         if not passed:
             raise RuntimeError(log)
@@ -416,6 +417,7 @@ def initialize_workflow(
             admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
             auth_read_expires=auth_read_expires,
             auth_write_expires=auth_write_expires,
+            enable_sync_local_index=True,
     )
 
     if enable_task_worker_initialization:

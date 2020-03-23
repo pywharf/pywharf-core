@@ -147,6 +147,7 @@ class TestKit:
                     root_folder=root_folder,
                     auth_read_expires=0,
                     auth_write_expires=0,
+                    enable_sync_local_index=True,
             )
 
             return RepoInfoForTest(

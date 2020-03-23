@@ -44,10 +44,18 @@ SESSION_KEY_PKG_REPO_SECRET_RAW = '_private_pypi_pkg_repo_secret_raw'
 # https://github.com/maxcountryman/flask-login/blob/d4fa75305fdfb73bb55386d95bc09664bca8f902/flask_login/login_manager.py#L330-L331
 @login_manager.request_loader
 def load_user_from_request(_):
-    # UA of pip and poetry:
+    user_agent = request.user_agent.string.lower()
+
+    # pip/poetry:
     # https://github.com/pypa/pip/blob/7420629800b10d117d3af3b668dbe99b475fcbc0/src/pip/_internal/network/session.py#L99
     # https://github.com/python-poetry/poetry/blob/5050362f0b4c41d4637dcaa74eb2ba188bd858a9/get-poetry.py#L906
-    if 'python' not in request.user_agent.string.lower():
+    in_cli = False
+    for word in ['python', 'curl', 'wget']:
+        if word in user_agent:
+            in_cli = True
+            break
+
+    if not in_cli:
         # Is browser.
         pkg_repo_name = session.get(SESSION_KEY_PKG_REPO_NAME)
         pkg_repo_secret_raw = session.get(SESSION_KEY_PKG_REPO_SECRET_RAW)
