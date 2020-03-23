@@ -281,7 +281,7 @@ def run_server(
         auth_write_expires: int = 300,
         extra_index_url: str = 'https://pypi.org/simple/',
         debug: bool = False,
-        host: str = 'localhost',
+        host: str = '0.0.0.0',
         port: int = 8888,
         **waitress_options: Any,
 ):

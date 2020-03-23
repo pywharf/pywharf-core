@@ -42,7 +42,7 @@ FLAGS
         Defaults to False.
     --host (str):
         The interface to bind to.
-        Defaults to 'localhost'.
+        Defaults to '0.0.0.0'.
     --port (int):
         The port to bind to.
         Defaults to 8080.
