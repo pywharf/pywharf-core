@@ -56,8 +56,8 @@ jobs:
         volumes:
           - pywharf-root:/pywharf-root
         env:
-          PYWHARF_COMMAND: server
-          PYWHARF_COMMAND_ROOT: /pywharf-root
+          PRIVATE_PYPI_COMMAND: server
+          PRIVATE_PYPI_COMMAND_ROOT: /pywharf-root
 
     steps:
       - uses: actions/checkout@v2
