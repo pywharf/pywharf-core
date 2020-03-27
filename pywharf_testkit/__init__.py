@@ -8,12 +8,12 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 import shortuuid
 
-from private_pypi_core.backend import (
+from pywharf_core.backend import (
         BackendInstanceManager,
         PkgRepoConfig,
         PkgRepoSecret,
 )
-from private_pypi_core.workflow import (
+from pywharf_core.workflow import (
         WorkflowStat,
         initialize_task_worker,
         build_workflow_stat,

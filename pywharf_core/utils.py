@@ -114,7 +114,7 @@ def git_hash_sha(path: str) -> str:
 
 
 def get_secret_key():
-    secret_key = os.getenv('PRIVATE_PYPI_SECRET_KEY')
+    secret_key = os.getenv('PYWHARF_SECRET_KEY')
     if secret_key is None:
         secret_key = str(uuid.getnode())
     return secret_key

@@ -32,14 +32,14 @@ jobs:
 
       - name: Lint.
         run: |
-          pylint private_pypi_core
-          yapf -d -r --style="$YAPF_STYLE" private_pypi_core
+          pylint pywharf_core
+          yapf -d -r --style="$YAPF_STYLE" pywharf_core
 
-          pylint private_pypi_backends
-          yapf -d -r --style="$YAPF_STYLE" private_pypi_backends
+          pylint pywharf_backends
+          yapf -d -r --style="$YAPF_STYLE" pywharf_backends
 
-          pylint private_pypi_testkit
-          yapf -d -r --style="$YAPF_STYLE" private_pypi_testkit
+          pylint pywharf_testkit
+          yapf -d -r --style="$YAPF_STYLE" pywharf_testkit
         env:
           YAPF_STYLE: '{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}'
 
@@ -49,20 +49,20 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      private-pypi:
+      pywharf:
         image: privatepypi/private-pypi:0.2.0
         ports:
           - 8888:8888
         volumes:
-          - private-pypi-root:/private-pypi-root
+          - pywharf-root:/pywharf-root
         env:
-          PRIVATE_PYPI_COMMAND: server
-          PRIVATE_PYPI_COMMAND_ROOT: /private-pypi-root
+          PYWHARF_COMMAND: server
+          PYWHARF_COMMAND_ROOT: /pywharf-root
 
     steps:
       - uses: actions/checkout@v2
 
-      - name: Setup private-pypi
+      - name: Setup pywharf
         run: |
           curl \
             -d "config=${CONFIG}&admin_secret=${ADMIN_SECRET}" \
@@ -70,14 +70,14 @@ jobs:
             http://localhost:8888/initialize/
         env:
           CONFIG: |
-            [private-pypi-pkg-repo]
+            [pywharf-pkg-repo]
             type = "github"
-            owner = "private-pypi"
-            repo = "private-pypi-pkg-repo"
+            owner = "pywharf"
+            repo = "pywharf-pkg-repo"
           ADMIN_SECRET: |
-            [private-pypi-pkg-repo]
+            [pywharf-pkg-repo]
             type = "github"
-            raw = "${{ secrets.PRIVATE_PYPI_PKG_REPO_TOKEN }}"
+            raw = "${{ secrets.PYWHARF_PKG_REPO_TOKEN }}"
 
       - name: Setup python
         uses: actions/setup-python@v1
@@ -92,11 +92,11 @@ jobs:
       - name: Build wheel
         run: poetry build -f wheel
 
-      - name: Publish to private-pypi.
+      - name: Publish to pywharf.
         run: twine upload --skip-existing --repository-url http://localhost:8888/simple/ dist/*
         env:
-          TWINE_USERNAME: private-pypi-pkg-repo
-          TWINE_PASSWORD: ${{ secrets.PRIVATE_PYPI_PKG_REPO_TOKEN }}
+          TWINE_USERNAME: pywharf-pkg-repo
+          TWINE_PASSWORD: ${{ secrets.PYWHARF_PKG_REPO_TOKEN }}
 
       - name: Publish to PyPI.
         run: twine upload --skip-existing dist/*

@@ -10,8 +10,8 @@ from flask_login import LoginManager, UserMixin, current_user, login_required
 import waitress
 from paste.translogger import TransLogger
 
-from private_pypi_core.backend import PkgRepoSecret
-from private_pypi_core.workflow import (
+from pywharf_core.backend import PkgRepoSecret
+from pywharf_core.workflow import (
         WorkflowStat,
         initialize_workflow,
         workflow_api_redirect_package_download_url,
@@ -20,8 +20,8 @@ from private_pypi_core.workflow import (
         workflow_api_upload_package,
         workflow_index_mtime,
 )
-from private_pypi_core.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
-from private_pypi_core.web import LOGIN_HTML
+from pywharf_core.utils import get_secret_key, decrypt_local_file_ref, split_package_ext
+from pywharf_core.web import LOGIN_HTML
 
 app = Flask(__name__)  # pylint: disable=invalid-name
 app.secret_key = get_secret_key()
@@ -37,8 +37,8 @@ class MockUser(UserMixin):
     pkg_repo_secret_raw: str
 
 
-SESSION_KEY_PKG_REPO_NAME = '_private_pypi_pkg_repo_name'
-SESSION_KEY_PKG_REPO_SECRET_RAW = '_private_pypi_pkg_repo_secret_raw'
+SESSION_KEY_PKG_REPO_NAME = '_pywharf_pkg_repo_name'
+SESSION_KEY_PKG_REPO_SECRET_RAW = '_pywharf_pkg_repo_secret_raw'
 
 
 # https://github.com/maxcountryman/flask-login/blob/d4fa75305fdfb73bb55386d95bc09664bca8f902/flask_login/login_manager.py#L330-L331
@@ -310,7 +310,7 @@ def run_server(
         )
         server_logging_path = join(
                 current_app.workflow_stat.root_local_paths.log,
-                'private_pypi_server.log',
+                'pywharf_server.log',
         )
 
     # Setup logging.

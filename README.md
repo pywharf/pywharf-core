@@ -1,3 +1,3 @@
-# private-pypi-core
+# pywharf-core
 
-The core of https://github.com/private-pypi/private-pypi
+The core of https://github.com/pywharf/pywharf

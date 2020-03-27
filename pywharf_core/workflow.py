@@ -21,7 +21,7 @@ from apscheduler.schedulers.background import BackgroundScheduler as _Background
 from apscheduler.schedulers import SchedulerNotRunningError
 import fire
 
-from private_pypi_core.backend import (
+from pywharf_core.backend import (
         DownloadIndexStatus,
         LocalPaths,
         PkgRef,
@@ -33,8 +33,8 @@ from private_pypi_core.backend import (
         UploadIndexStatus,
         BackendInstanceManager,
 )
-from private_pypi_core.job import dynamic_dramatiq
-from private_pypi_core.utils import locked_copy_file
+from pywharf_core.job import dynamic_dramatiq
+from pywharf_core.utils import locked_copy_file
 
 SHST = TypeVar('SHST')
 
@@ -350,7 +350,7 @@ def initialize_task_worker(
 
     dramatiq_command = [
             'dramatiq',
-            'private_pypi_core.job',
+            'pywharf_core.job',
             '--processes',
             str(dramatiq_processes),
     ]

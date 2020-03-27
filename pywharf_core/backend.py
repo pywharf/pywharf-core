@@ -12,7 +12,7 @@ import inspect
 # TODO: follows https://github.com/PyCQA/pylint/issues/1524
 from pydantic import BaseModel  # pylint: disable=no-name-in-module
 
-from private_pypi_core.utils import (
+from pywharf_core.utils import (
         read_toml,
         write_toml,
         normalize_distribution_name,
@@ -201,7 +201,7 @@ class BackendInstanceManager:
         self._type_to_registration: Dict[str, Type[BackendRegistration]] = {}
 
         # Namespace package root.
-        root_module = importlib.import_module('.', 'private_pypi_backends')
+        root_module = importlib.import_module('.', 'pywharf_backends')
         # Find all submodules.
         for module_info in pkgutil.iter_modules(
                 root_module.__path__,  # type: ignore

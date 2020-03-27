@@ -2,8 +2,8 @@ from typing import Tuple
 
 import shortuuid
 
-from private_pypi_testkit import TestKit, RepoInfoForTest
-from private_pypi_backends.file_system.impl import (
+from pywharf_testkit import TestKit, RepoInfoForTest
+from pywharf_backends.file_system.impl import (
         FileSystemConfig,
         FileSystemSecret,
 )

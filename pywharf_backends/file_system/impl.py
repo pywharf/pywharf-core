@@ -9,7 +9,7 @@ import traceback
 from filelock import FileLock
 import shortuuid
 
-from private_pypi_core.backend import (
+from pywharf_core.backend import (
         PkgRef,
         PkgRepo,
         PkgRepoConfig,
@@ -23,7 +23,7 @@ from private_pypi_core.backend import (
         DownloadIndexResult,
         BackendInstanceManager,
 )
-from private_pypi_core.utils import (
+from pywharf_core.utils import (
         write_toml,
         read_toml,
         git_hash_sha,
