@@ -33,13 +33,13 @@ jobs:
       - name: Lint.
         run: |
           flake8 pywharf_core
-          yapf -d -r --style="$YAPF_STYLE" pywharf_core
+          yapf -d -r pywharf_core
 
           flake8 pywharf_backends
-          yapf -d -r --style="$YAPF_STYLE" pywharf_backends
+          yapf -d -r pywharf_backends
 
           flake8 pywharf_testkit
-          yapf -d -r --style="$YAPF_STYLE" pywharf_testkit
+          yapf -d -r pywharf_testkit
         env:
           YAPF_STYLE: '{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}'
 
