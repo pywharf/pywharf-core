@@ -62,8 +62,8 @@ jobs:
 
       - name: Setup pywharf
         run: |
-          echo "config=${CONFIG}&admin_secret=${ADMIN_SECRET}"
           curl \
+            --fail \
             -d "config=${CONFIG}&admin_secret=${ADMIN_SECRET}" \
             -X POST \
             http://localhost:8888/initialize/
