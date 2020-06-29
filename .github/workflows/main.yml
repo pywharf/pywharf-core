@@ -48,7 +48,7 @@ jobs:
 
     services:
       pywharf:
-        image: pywharf/pywharf:0.2.0
+        image: pywharf/pywharf:0.2.1
         ports:
           - 8888:8888
         volumes:
@@ -91,7 +91,7 @@ jobs:
         run: poetry build -f wheel
 
       - name: Publish to pywharf.
-        run: twine upload --skip-existing --repository-url http://localhost:8888/simple/ dist/*
+        run: twine upload --verbose --skip-existing --repository-url http://localhost:8888/simple/ dist/*
         env:
           TWINE_USERNAME: pywharf-pkg-repo
           TWINE_PASSWORD: ${{ secrets.PYWHARF_PKG_REPO_TOKEN }}
