@@ -40,8 +40,6 @@ jobs:
 
           flake8 pywharf_testkit
           yapf -d -r pywharf_testkit
-        env:
-          YAPF_STYLE: '{based_on_style: google, continuation_indent_width: 8, dedent_closing_brackets: false, column_limit: 100}'
 
   publish:
     needs: [ci]
