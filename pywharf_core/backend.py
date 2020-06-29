@@ -9,15 +9,14 @@ import traceback
 from typing import Callable, Dict, List, Tuple, Iterable, TypeVar, Type, Optional
 import inspect
 
-# TODO: follows https://github.com/PyCQA/pylint/issues/1524
-from pydantic import BaseModel  # pylint: disable=no-name-in-module
+from pydantic import BaseModel
 
 from pywharf_core.utils import (
-        read_toml,
-        write_toml,
-        normalize_distribution_name,
-        now_timestamp,
-        update_hash_algo_with_file,
+    read_toml,
+    write_toml,
+    normalize_distribution_name,
+    now_timestamp,
+    update_hash_algo_with_file,
 )
 
 
@@ -204,8 +203,8 @@ class BackendInstanceManager:
         root_module = importlib.import_module('.', 'pywharf_backends')
         # Find all submodules.
         for module_info in pkgutil.iter_modules(
-                root_module.__path__,  # type: ignore
-                root_module.__name__ + '.',
+            root_module.__path__,  # type: ignore
+            root_module.__name__ + '.',
         ):
             # Load module.
             module = importlib.import_module(module_info.name)
@@ -226,16 +225,16 @@ class BackendInstanceManager:
             assert registration.type
 
             assert issubclass(registration.pkg_repo_config_cls, PkgRepoConfig) \
-                    and registration.pkg_repo_config_cls is not PkgRepoConfig
+                and registration.pkg_repo_config_cls is not PkgRepoConfig
 
             assert issubclass(registration.pkg_repo_secret_cls, PkgRepoSecret) \
-                    and registration.pkg_repo_secret_cls is not PkgRepoSecret
+                and registration.pkg_repo_secret_cls is not PkgRepoSecret
 
             assert issubclass(registration.pkg_repo_cls, PkgRepo) \
-                    and registration.pkg_repo_cls is not PkgRepo
+                and registration.pkg_repo_cls is not PkgRepo
 
             assert issubclass(registration.pkg_ref_cls, PkgRef) \
-                    and registration.pkg_ref_cls is not PkgRef
+                and registration.pkg_ref_cls is not PkgRef
 
             self._type_to_registration[registration.type] = registration
 
@@ -321,9 +320,9 @@ class BackendInstanceManager:
 
     @staticmethod
     def dump_pkg_repo_secrets(
-            path: str,
-            pkg_repo_secrets: Iterable[PkgRepoSecret],
-            name_to_env: Optional[Dict[str, str]] = None,
+        path: str,
+        pkg_repo_secrets: Iterable[PkgRepoSecret],
+        name_to_env: Optional[Dict[str, str]] = None,
     ) -> None:
         dump = {}
 
@@ -351,8 +350,8 @@ class BackendInstanceManager:
     @staticmethod
     def dump_pkg_refs_and_mtime(path: str, pkg_refs: Iterable[PkgRef]) -> None:
         struct = {
-                'pkgs': [pkg_ref.dict() for pkg_ref in pkg_refs],
-                'mtime': now_timestamp(),
+            'pkgs': [pkg_ref.dict() for pkg_ref in pkg_refs],
+            'mtime': now_timestamp(),
         }
         write_toml(path, struct)
 
@@ -375,7 +374,7 @@ def record_error_if_raises(method: _METHOD) -> _METHOD:
         try:
             ret = method(self, *args, **kwargs)
             return ret
-        except:
+        except Exception:
             self.record_error(traceback.format_exc())
             raise
 

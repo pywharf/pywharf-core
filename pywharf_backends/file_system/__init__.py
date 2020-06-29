@@ -1,10 +1,10 @@
 from pywharf_core.backend import BackendRegistration
 from pywharf_backends.file_system.impl import (
-        FILE_SYSTEM_TYPE,
-        FileSystemConfig,
-        FileSystemSecret,
-        FileSystemPkgRepo,
-        FileSystemPkgRef,
+    FILE_SYSTEM_TYPE,
+    FileSystemConfig,
+    FileSystemSecret,
+    FileSystemPkgRepo,
+    FileSystemPkgRef,
 )
 
 

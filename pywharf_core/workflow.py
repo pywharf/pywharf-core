@@ -12,6 +12,7 @@ import tempfile
 import threading
 import traceback
 from typing import DefaultDict, Dict, Generic, List, Optional, Tuple, TypeVar, Any
+from urllib.parse import urljoin
 
 from filelock import FileLock
 from jinja2 import Template
@@ -19,19 +20,21 @@ import psutil
 import redis_server
 from apscheduler.schedulers.background import BackgroundScheduler as _BackgroundScheduler
 from apscheduler.schedulers import SchedulerNotRunningError
+import requests
+from lxml import html
 import fire
 
 from pywharf_core.backend import (
-        DownloadIndexStatus,
-        LocalPaths,
-        PkgRef,
-        PkgRepo,
-        PkgRepoConfig,
-        PkgRepoSecret,
-        PkgRepoIndex,
-        UploadPackageStatus,
-        UploadIndexStatus,
-        BackendInstanceManager,
+    DownloadIndexStatus,
+    LocalPaths,
+    PkgRef,
+    PkgRepo,
+    PkgRepoConfig,
+    PkgRepoSecret,
+    PkgRepoIndex,
+    UploadPackageStatus,
+    UploadIndexStatus,
+    BackendInstanceManager,
 )
 from pywharf_core.job import dynamic_dramatiq
 from pywharf_core.utils import locked_copy_file
@@ -104,12 +107,12 @@ class WorkflowStat:
 
 
 def build_workflow_stat(
-        root_folder: str,
-        pkg_repo_config_file: Optional[str],
-        admin_pkg_repo_secret_file: Optional[str],
-        auth_read_expires: int,
-        auth_write_expires: int,
-        enable_sync_local_index: bool = False,
+    root_folder: str,
+    pkg_repo_config_file: Optional[str],
+    admin_pkg_repo_secret_file: Optional[str],
+    auth_read_expires: int,
+    auth_write_expires: int,
+    enable_sync_local_index: bool = False,
 ) -> WorkflowStat:
     backend_instance_manager = BackendInstanceManager()
 
@@ -119,24 +122,25 @@ def build_workflow_stat(
         if not exists(pkg_repo_config_file):
             raise FileNotFoundError(f'pkg_repo_config_file={pkg_repo_config_file} not exists.')
         name_to_pkg_repo_config = \
-                backend_instance_manager.load_pkg_repo_configs(pkg_repo_config_file)
+            backend_instance_manager.load_pkg_repo_configs(pkg_repo_config_file)
 
     # Admin secret.
     name_to_admin_pkg_repo_secret = None
     if admin_pkg_repo_secret_file is not None:
         if not exists(admin_pkg_repo_secret_file):
             raise FileNotFoundError(
-                    f'admin_pkg_repo_secret_file={admin_pkg_repo_secret_file} not exists.')
+                f'admin_pkg_repo_secret_file={admin_pkg_repo_secret_file} not exists.'
+            )
         name_to_admin_pkg_repo_secret = \
-                backend_instance_manager.load_pkg_repo_secrets(admin_pkg_repo_secret_file)
+            backend_instance_manager.load_pkg_repo_secrets(admin_pkg_repo_secret_file)
 
     # Root folders.
     root_local_paths = LocalPaths(
-            index=join(root_folder, 'index'),
-            log=join(root_folder, 'log'),
-            lock=join(root_folder, 'lock'),
-            job=join(root_folder, 'job'),
-            cache=join(root_folder, 'cache'),
+        index=join(root_folder, 'index'),
+        log=join(root_folder, 'log'),
+        lock=join(root_folder, 'lock'),
+        job=join(root_folder, 'job'),
+        cache=join(root_folder, 'cache'),
     )
     root_local_paths.makedirs()
 
@@ -147,39 +151,39 @@ def build_workflow_stat(
 
         # Create isolated folders for each package repository.
         name_to_local_paths[name] = LocalPaths(
-                index=join(root_local_paths.index, name),
-                log=join(root_local_paths.log, name),
-                lock=join(root_local_paths.lock, name),
-                job=join(root_local_paths.job, name),
-                cache=join(root_local_paths.cache, name),
+            index=join(root_local_paths.index, name),
+            log=join(root_local_paths.log, name),
+            lock=join(root_local_paths.lock, name),
+            job=join(root_local_paths.job, name),
+            cache=join(root_local_paths.cache, name),
         )
         name_to_local_paths[name].makedirs()
 
         # Index paths of (index_lock, index).
         name_to_index_paths[name] = (
-                join(name_to_local_paths[name].lock, f'index.toml.lock'),
-                join(name_to_local_paths[name].index, f'index.toml'),
+            join(name_to_local_paths[name].lock, 'index.toml.lock'),
+            join(name_to_local_paths[name].index, 'index.toml'),
         )
 
     # Build WorkflowStat.
     wstat = WorkflowStat(
-            backend_instance_manager=backend_instance_manager,
-            name_to_pkg_repo_config=name_to_pkg_repo_config,
-            root_folder=root_folder,
-            root_local_paths=root_local_paths,
-            name_to_local_paths=name_to_local_paths,
-            name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
-            name_to_index_paths=name_to_index_paths,
-            name_to_index_mtime_size={},  # Will setup later.
-            name_to_pkg_repo_index={},  # Will setup later.
-            auth_read_expires=auth_read_expires,
-            auth_write_expires=auth_write_expires,
-            pkg_repo_global_lock=threading.Lock(),
-            name_to_pkg_repo_lock_shstg=defaultdict(SecretHashedStorage),
-            name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
-            name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
-            name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
-            scheduler=BackgroundScheduler(),
+        backend_instance_manager=backend_instance_manager,
+        name_to_pkg_repo_config=name_to_pkg_repo_config,
+        root_folder=root_folder,
+        root_local_paths=root_local_paths,
+        name_to_local_paths=name_to_local_paths,
+        name_to_admin_pkg_repo_secret=name_to_admin_pkg_repo_secret,
+        name_to_index_paths=name_to_index_paths,
+        name_to_index_mtime_size={},  # Will setup later.
+        name_to_pkg_repo_index={},  # Will setup later.
+        auth_read_expires=auth_read_expires,
+        auth_write_expires=auth_write_expires,
+        pkg_repo_global_lock=threading.Lock(),
+        name_to_pkg_repo_lock_shstg=defaultdict(SecretHashedStorage),
+        name_to_pkg_repo_shstg=defaultdict(SecretHashedStorage),
+        name_to_pkg_repo_read_mtime_shstg=defaultdict(SecretHashedStorage),
+        name_to_pkg_repo_write_mtime_shstg=defaultdict(SecretHashedStorage),
+        scheduler=BackgroundScheduler(),
     )
 
     if enable_sync_local_index and name_to_admin_pkg_repo_secret:
@@ -192,7 +196,8 @@ def build_workflow_stat(
         _, index_path = name_to_index_paths[pkg_repo_config.name]
         if not exists(index_path):
             raise FileNotFoundError(
-                    f'index file={index_path} for name={pkg_repo_config.name} not exists')
+                f'index file={index_path} for name={pkg_repo_config.name} not exists'
+            )
 
         wstat.name_to_index_mtime_size[pkg_repo_config.name] = get_mtime_size(index_path)
 
@@ -215,10 +220,10 @@ def sync_single_local_index(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
 
     try:
         pkg_repo = wstat.backend_instance_manager.create_pkg_repo(
-                type=pkg_repo_config.type,
-                config=pkg_repo_config,
-                secret=pkg_repo_secret,
-                local_paths=wstat.name_to_local_paths[name],
+            type=pkg_repo_config.type,
+            config=pkg_repo_config,
+            secret=pkg_repo_secret,
+            local_paths=wstat.name_to_local_paths[name],
         )
 
         up_to_date = False
@@ -244,7 +249,7 @@ def sync_single_local_index(wstat: WorkflowStat, name: str) -> Tuple[bool, str]:
 
         return True, f'[PASS] "{name}" is up-to-date.'
 
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return False, f'[ERROR] traceback of "{name}":\n' + traceback.format_exc()
 
 
@@ -264,17 +269,17 @@ def sync_local_index(wstat: WorkflowStat) -> Tuple[bool, str]:
 
 @dynamic_dramatiq.actor()
 def sync_local_index_job(
-        pkg_repo_config_file: str,
-        admin_pkg_repo_secret_file: str,
-        root_folder: str,
-        name: str,
+    pkg_repo_config_file: str,
+    admin_pkg_repo_secret_file: str,
+    root_folder: str,
+    name: str,
 ):
     wstat = build_workflow_stat(
-            root_folder=root_folder,
-            pkg_repo_config_file=pkg_repo_config_file,
-            admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-            auth_read_expires=0,
-            auth_write_expires=0,
+        root_folder=root_folder,
+        pkg_repo_config_file=pkg_repo_config_file,
+        admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+        auth_read_expires=0,
+        auth_write_expires=0,
     )
 
     # Setup logging.
@@ -292,7 +297,7 @@ def sync_local_index_job(
         else:
             logger.error(log)
 
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         logger.error(traceback.format_exc())
 
 
@@ -315,8 +320,8 @@ def stop_all_children_processes():
 
 
 def initialize_task_worker(
-        dramatiq_processes: int = 1,
-        dramatiq_log_file: Optional[str] = None,
+    dramatiq_processes: int = 1,
+    dramatiq_log_file: Optional[str] = None,
 ):
     # All processes in the current process group will be terminated
     # with the lead process.
@@ -331,17 +336,17 @@ def initialize_task_worker(
     # Run Redis.
     redis_port = random_select_port()
     pgid = os.getpgrp()
-    subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-            [redis_server.REDIS_SERVER_PATH, '--port', redis_port],
-            # Attach to the current process group.
-            preexec_fn=lambda: os.setpgid(0, pgid),
-            # Suppress stdout and stderr.
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+    subprocess.Popen(
+        [redis_server.REDIS_SERVER_PATH, '--port', redis_port],
+        # Attach to the current process group.
+        preexec_fn=lambda: os.setpgid(0, pgid),
+        # Suppress stdout and stderr.
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     # Set broker.
-    from dramatiq.brokers.redis import RedisBroker  # pylint: disable=import-outside-toplevel
+    from dramatiq.brokers.redis import RedisBroker
     dynamic_dramatiq.set_broker(RedisBroker(host='localhost', port=redis_port))
 
     # Run worker.
@@ -349,33 +354,33 @@ def initialize_task_worker(
     dramatiq_env['DYNAMIC_DRAMATIQ_REDIS_BROKER_PORT'] = redis_port
 
     dramatiq_command = [
-            'dramatiq',
-            'pywharf_core.job',
-            '--processes',
-            str(dramatiq_processes),
+        'dramatiq',
+        'pywharf_core.job',
+        '--processes',
+        str(dramatiq_processes),
     ]
     if dramatiq_log_file:
         dramatiq_command.extend([
-                '--log-file',
-                dramatiq_log_file,
+            '--log-file',
+            dramatiq_log_file,
         ])
 
-    subprocess.Popen(  # pylint: disable=subprocess-popen-preexec-fn
-            dramatiq_command,
-            # Share env.
-            env=dramatiq_env,
-            # Attach to the current process group.
-            preexec_fn=lambda: os.setpgid(0, pgid),
-            # Suppress stdout and stderr.
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+    subprocess.Popen(
+        dramatiq_command,
+        # Share env.
+        env=dramatiq_env,
+        # Attach to the current process group.
+        preexec_fn=lambda: os.setpgid(0, pgid),
+        # Suppress stdout and stderr.
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
 
 def _prepare_file(
-        root_folder: str,
-        file_or_text: Optional[str],
-        dst_filename: str,
+    root_folder: str,
+    file_or_text: Optional[str],
+    dst_filename: str,
 ) -> Optional[str]:
     file = file_or_text
     if file_or_text and not exists(file_or_text):
@@ -386,24 +391,24 @@ def _prepare_file(
 
 
 def initialize_workflow(
-        root_folder: str,
-        pkg_repo_config_file_or_text: Optional[str],
-        admin_pkg_repo_secret_file_or_text: Optional[str],
-        auth_read_expires: int,
-        auth_write_expires: int,
-        config_or_admin_secret_can_be_text: bool = False,
-        enable_task_worker_initialization: bool = False,
+    root_folder: str,
+    pkg_repo_config_file_or_text: Optional[str],
+    admin_pkg_repo_secret_file_or_text: Optional[str],
+    auth_read_expires: int,
+    auth_write_expires: int,
+    config_or_admin_secret_can_be_text: bool = False,
+    enable_task_worker_initialization: bool = False,
 ) -> WorkflowStat:
     if config_or_admin_secret_can_be_text:
         pkg_repo_config_file = _prepare_file(
-                root_folder,
-                pkg_repo_config_file_or_text,
-                'config.toml',
+            root_folder,
+            pkg_repo_config_file_or_text,
+            'config.toml',
         )
         admin_pkg_repo_secret_file = _prepare_file(
-                root_folder,
-                admin_pkg_repo_secret_file_or_text,
-                'admin_secret.toml',
+            root_folder,
+            admin_pkg_repo_secret_file_or_text,
+            'admin_secret.toml',
         )
     else:
         pkg_repo_config_file = pkg_repo_config_file_or_text
@@ -412,31 +417,32 @@ def initialize_workflow(
     # Initialize workflow state.
     # NOTE: backend_instance_manager must be created before broker setup.
     wstat = build_workflow_stat(
-            root_folder=abspath(root_folder),
-            pkg_repo_config_file=pkg_repo_config_file,
-            admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-            auth_read_expires=auth_read_expires,
-            auth_write_expires=auth_write_expires,
-            enable_sync_local_index=True,
+        root_folder=abspath(root_folder),
+        pkg_repo_config_file=pkg_repo_config_file,
+        admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+        auth_read_expires=auth_read_expires,
+        auth_write_expires=auth_write_expires,
+        enable_sync_local_index=True,
     )
 
     if enable_task_worker_initialization:
         # Initialize task queue related stuff.
         initialize_task_worker(
-                dramatiq_log_file=join(wstat.root_local_paths.log, 'dramatiq_worker.log'))
+            dramatiq_log_file=join(wstat.root_local_paths.log, 'dramatiq_worker.log')
+        )
 
     # Schedule sync_local_index_job.
     for name, pkg_repo_config in wstat.name_to_pkg_repo_config.items():
         wstat.scheduler.add_job(
-                sync_local_index_job,
-                trigger='interval',
-                kwargs={
-                        'pkg_repo_config_file': pkg_repo_config_file,
-                        'admin_pkg_repo_secret_file': admin_pkg_repo_secret_file,
-                        'root_folder': root_folder,
-                        'name': name,
-                },
-                seconds=pkg_repo_config.sync_index_interval,
+            sync_local_index_job,
+            trigger='interval',
+            kwargs={
+                'pkg_repo_config_file': pkg_repo_config_file,
+                'admin_pkg_repo_secret_file': admin_pkg_repo_secret_file,
+                'root_folder': root_folder,
+                'name': name,
+            },
+            seconds=pkg_repo_config.sync_index_interval,
         )
     wstat.scheduler.start()
 
@@ -444,11 +450,11 @@ def initialize_workflow(
 
 
 def pkg_repo_is_expired(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_lock: threading.RLock,
-        pkg_repo_secret: PkgRepoSecret,
-        check_auth_read: bool,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_lock: threading.RLock,
+    pkg_repo_secret: PkgRepoSecret,
+    check_auth_read: bool,
 ) -> bool:
     with pkg_repo_lock:
         pkg_repo_shstg = wstat.name_to_pkg_repo_shstg[name]
@@ -483,10 +489,10 @@ def pkg_repo_is_expired(
 
 
 def pkg_repo_secret_is_authenticated(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
-        check_auth_read: bool,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
+    check_auth_read: bool,
 ) -> Tuple[Optional[PkgRepo], str]:
     '''name has been validated.
     '''
@@ -510,18 +516,18 @@ def pkg_repo_secret_is_authenticated(
             pkg_repo_mtime_shstg = wstat.name_to_pkg_repo_write_mtime_shstg[name]
 
         if pkg_repo_is_expired(
-                wstat,
-                name,
-                pkg_repo_lock,
-                pkg_repo_secret,
-                check_auth_read,
+            wstat,
+            name,
+            pkg_repo_lock,
+            pkg_repo_secret,
+            check_auth_read,
         ):
             # Initialize.
             pkg_repo = wstat.backend_instance_manager.create_pkg_repo(
-                    type=pkg_repo_config.type,
-                    config=pkg_repo_config,
-                    secret=pkg_repo_secret,
-                    local_paths=wstat.name_to_local_paths[name],
+                type=pkg_repo_config.type,
+                config=pkg_repo_config,
+                secret=pkg_repo_secret,
+                local_paths=wstat.name_to_local_paths[name],
             )
 
             ready, err_msg = pkg_repo.ready()
@@ -556,11 +562,11 @@ def keep_pkg_repo_index_up_to_date(wstat: WorkflowStat, name: str) -> Tuple[bool
             if cur_mtime_size != last_mtime_size:
                 # Index has been updated, reload.
                 pkg_refs, remote_mtime = \
-                        wstat.backend_instance_manager.load_pkg_refs_and_mtime(index_path)
+                    wstat.backend_instance_manager.load_pkg_refs_and_mtime(index_path)
                 wstat.name_to_pkg_repo_index[pkg_repo_config.name] = \
-                        PkgRepoIndex(pkg_refs, remote_mtime)
+                    PkgRepoIndex(pkg_refs, remote_mtime)
 
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return False, traceback.format_exc()
 
     return True, ''
@@ -572,7 +578,7 @@ def get_pkg_repo_index(wstat: WorkflowStat, name: str) -> Tuple[Optional[PkgRepo
         with FileLock(index_lock_path, timeout=1.0):
             return wstat.name_to_pkg_repo_index[name], ''
 
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None, traceback.format_exc()
 
 
@@ -584,7 +590,8 @@ class LinkItem:
 
 # PEP 503 -- Simple Repository API
 # https://www.python.org/dev/peps/pep-0503/
-PAGE_TEMPLATE = Template('''<!DOCTYPE html>
+PAGE_TEMPLATE = Template(
+    '''<!DOCTYPE html>
 <html>
 <head><title>{{ title }}</title></head>
 <body>
@@ -597,17 +604,17 @@ PAGE_TEMPLATE = Template('''<!DOCTYPE html>
 
 </body>
 </html>
-''')
+'''
+)
 
 
 def build_page_api_simple(pkg_repo_index: PkgRepoIndex) -> str:
     link_items = [
-            LinkItem(href=f'{distrib}/', text=distrib)
-            for distrib in pkg_repo_index.all_distributions
+        LinkItem(href=f'{distrib}/', text=distrib) for distrib in pkg_repo_index.all_distributions
     ]
     return PAGE_TEMPLATE.render(
-            title='Links for all distributions',
-            link_items=link_items,
+        title='Links for all distributions',
+        link_items=link_items,
     )
 
 
@@ -615,27 +622,28 @@ def build_page_api_simple_distrib(distrib: str, pkg_refs: List[PkgRef]) -> str:
     link_items = []
     for pkg_ref in pkg_refs:
         link_items.append(
-                LinkItem(
-                        href=f'{pkg_ref.package}.{pkg_ref.ext}#sha256={pkg_ref.sha256}',
-                        text=f'{pkg_ref.package}.{pkg_ref.ext}',
-                ))
+            LinkItem(
+                href=f'{pkg_ref.package}.{pkg_ref.ext}#sha256={pkg_ref.sha256}',
+                text=f'{pkg_ref.package}.{pkg_ref.ext}',
+            )
+        )
     return PAGE_TEMPLATE.render(
-            title=f'Links for {distrib}',
-            link_items=link_items,
+        title=f'Links for {distrib}',
+        link_items=link_items,
     )
 
 
 def workflow_get_pkg_repo_index(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
-        check_auth_read: bool = True,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
+    check_auth_read: bool = True,
 ) -> Tuple[Optional[PkgRepoIndex], str, int]:
     pkg_repo, err_msg = pkg_repo_secret_is_authenticated(
-            wstat,
-            name,
-            pkg_repo_secret,
-            check_auth_read=check_auth_read,
+        wstat,
+        name,
+        pkg_repo_secret,
+        check_auth_read=check_auth_read,
     )
     if pkg_repo is None:
         return None, err_msg, 401
@@ -652,14 +660,14 @@ def workflow_get_pkg_repo_index(
 
 
 def workflow_api_simple(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
 ) -> Tuple[str, int]:
     pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
-            wstat,
-            name,
-            pkg_repo_secret,
+        wstat,
+        name,
+        pkg_repo_secret,
     )
     if pkg_repo_index is None:
         return err_msg, status_code
@@ -667,15 +675,15 @@ def workflow_api_simple(
 
 
 def workflow_api_simple_distrib(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
-        distrib: str,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
+    distrib: str,
 ) -> Tuple[str, int]:
     pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
-            wstat,
-            name,
-            pkg_repo_secret,
+        wstat,
+        name,
+        pkg_repo_secret,
     )
     if pkg_repo_index is None:
         return err_msg, status_code
@@ -687,49 +695,76 @@ def workflow_api_simple_distrib(
     return build_page_api_simple_distrib(distrib, pkg_refs), 200
 
 
+def absurl(base_url: str, url: str):
+    if url.startswith('/') or '://' in url:
+        # Already an absolute url.
+        return url
+    else:
+        return urljoin(base_url, url)
+
+
+def workflow_api_simple_distrib_to_extra_index_url(
+    extra_index_url: str,
+    distrib: str,
+) -> Tuple[str, int]:
+    base_url = f'{extra_index_url}{distrib}/'
+    rsp = requests.get(base_url)
+    if rsp.status_code != 200:
+        return rsp.text, rsp.status_code
+
+    tree = html.fromstring(rsp.content)
+    for attr in ['href', 'src']:
+        for link in tree.xpath(f'//*[@{attr}]'):
+            link.attrib[attr] = absurl(base_url, link.attrib[attr])
+
+    return html.tostring(tree, encoding='utf-8'), 200
+
+
 def workflow_api_redirect_package_download_url(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
-        distrib: str,
-        package: str,
-        ext: str,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
+    distrib: str,
+    package: str,
+    ext: str,
 ) -> Tuple[Optional[str], str, int]:
     pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
-            wstat,
-            name,
-            pkg_repo_secret,
+        wstat,
+        name,
+        pkg_repo_secret,
     )
     if pkg_repo_index is None:
         return None, err_msg, status_code
 
     pkg_ref = pkg_repo_index.get_single_pkg_ref(distrib, package)
     if pkg_ref is None:
-        return None, f'Package "{distrib}, {package}.{ext}" not exists.', 404
+        msg = (f'Package "{distrib}, {package}.{ext} " ' 'not exists.')
+        return None, msg, 404
     elif pkg_ref.ext != ext:
-        return None, f'Package "{distrib}, {package}.{ext}" extention not match (query="{ext}")', 404
+        msg = (f'Package "{distrib}, {package}.{ext} " ' f'extention not match (query="{ext}").')
+        return None, msg, 404
 
     try:
         auth_url = pkg_ref.auth_url(wstat.name_to_pkg_repo_config[name], pkg_repo_secret)
         return auth_url, '', -1
 
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None, 'Failed to get resource.\n' + traceback.format_exc(), 401
 
 
 def workflow_api_upload_package(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
-        filename: str,
-        meta: Dict[str, str],
-        path: str,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
+    filename: str,
+    meta: Dict[str, str],
+    path: str,
 ) -> Tuple[str, int]:
     pkg_repo, err_msg = pkg_repo_secret_is_authenticated(
-            wstat,
-            name,
-            pkg_repo_secret,
-            check_auth_read=False,
+        wstat,
+        name,
+        pkg_repo_secret,
+        check_auth_read=False,
     )
     if pkg_repo is None:
         return err_msg, 401
@@ -750,14 +785,14 @@ def workflow_api_upload_package(
 
 
 def workflow_index_mtime(
-        wstat: WorkflowStat,
-        name: str,
-        pkg_repo_secret: PkgRepoSecret,
+    wstat: WorkflowStat,
+    name: str,
+    pkg_repo_secret: PkgRepoSecret,
 ) -> Tuple[str, int]:
     pkg_repo_index, err_msg, status_code = workflow_get_pkg_repo_index(
-            wstat,
-            name,
-            pkg_repo_secret,
+        wstat,
+        name,
+        pkg_repo_secret,
     )
     if pkg_repo_index is None:
         return err_msg, status_code
@@ -765,35 +800,35 @@ def workflow_index_mtime(
 
 
 def update_index(
-        type: str,  # pylint: disable=redefined-builtin
-        name: str,
-        secret: Optional[str] = None,
-        secret_env: Optional[str] = None,
-        **config_kwargs: Any,
+    type: str,
+    name: str,
+    secret: Optional[str] = None,
+    secret_env: Optional[str] = None,
+    **config_kwargs: Any,
 ):
     bim = BackendInstanceManager()
 
     root_tmp_dir = str(tempfile.mkdtemp())
     pkg_repo = bim.create_pkg_repo(
+        type=type,
+        config=bim.create_pkg_repo_config(
             type=type,
-            config=bim.create_pkg_repo_config(
-                    type=type,
-                    name=name,
-                    **config_kwargs,
-            ),
-            secret=bim.create_pkg_repo_secret(
-                    type=type,
-                    name=name,
-                    raw=secret,
-                    env=secret_env,
-            ),
-            local_paths=LocalPaths(
-                    index=str(tempfile.mkdtemp(dir=root_tmp_dir)),
-                    log=str(tempfile.mkdtemp(dir=root_tmp_dir)),
-                    lock=str(tempfile.mkdtemp(dir=root_tmp_dir)),
-                    job=str(tempfile.mkdtemp(dir=root_tmp_dir)),
-                    cache=str(tempfile.mkdtemp(dir=root_tmp_dir)),
-            ),
+            name=name,
+            **config_kwargs,
+        ),
+        secret=bim.create_pkg_repo_secret(
+            type=type,
+            name=name,
+            raw=secret,
+            env=secret_env,
+        ),
+        local_paths=LocalPaths(
+            index=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+            log=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+            lock=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+            job=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+            cache=str(tempfile.mkdtemp(dir=root_tmp_dir)),
+        ),
     )
     print('pkg_repo_config:', pkg_repo.config.dict())
 
@@ -823,4 +858,4 @@ def update_index(
                 raise RuntimeError(result.message)
 
 
-update_index_cli = lambda: fire.Fire(update_index)  # pylint: disable=invalid-name
+update_index_cli = lambda: fire.Fire(update_index)  # noqa: E731

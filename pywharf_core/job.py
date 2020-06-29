@@ -27,7 +27,7 @@ class DynamicDramatiq:
         return decorator
 
     def set_broker(self, broker):
-        import dramatiq  # pylint: disable=import-outside-toplevel
+        import dramatiq
 
         self.broker = broker
         dramatiq.set_broker(broker)
@@ -37,13 +37,13 @@ class DynamicDramatiq:
             self.func_to_actor[func] = dramatiq.actor(**actor_kwargs)(func)
 
 
-dynamic_dramatiq = DynamicDramatiq()  # pylint: disable=invalid-name
+dynamic_dramatiq = DynamicDramatiq()
 
 # If set, enter worker mode.
 _REDIS_BROKER_PORT = os.getenv('DYNAMIC_DRAMATIQ_REDIS_BROKER_PORT')
 if _REDIS_BROKER_PORT:
     # 1. Load actors.
-    import pywharf_core.workflow  # pylint: disable=unused-import
+    import pywharf_core.workflow  # noqa: F401
     from pywharf_core.backend import BackendInstanceManager
     BackendInstanceManager()
 

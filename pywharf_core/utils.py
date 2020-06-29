@@ -82,7 +82,6 @@ def file_lock_is_busy(lock_path):
 
 @dataclass
 class LockedFileLikeObject(TextIO):
-    # pylint: disable=abstract-method
     lock_path: str
     write_func: Callable
 
@@ -129,7 +128,7 @@ def encrypt_object_to_base64(obj):
         compressed_dumped = zlib.compress(dumped)
         data = Fernet(_FERNET_SECRET_KEY).encrypt(compressed_dumped)
         return base64.b64encode(data).decode()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None
 
 
@@ -139,7 +138,7 @@ def decrypt_base64_to_object(text):
         compressed_dumped = Fernet(_FERNET_SECRET_KEY).decrypt(base64_decoded)
         dumped = zlib.decompress(compressed_dumped)
         return json.loads(dumped.decode())
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None
 
 
@@ -148,12 +147,14 @@ def now_timestamp() -> int:
 
 
 def encrypt_local_file_ref(path: str, filename: str, max_expired: int = 300):
-    return encrypt_object_to_base64({
+    return encrypt_object_to_base64(
+        {
             'path': path,
             'filename': filename,
             'timestamp': now_timestamp(),
             'max_expired': max_expired,
-    })
+        }
+    )
 
 
 def decrypt_local_file_ref(text):
@@ -176,18 +177,18 @@ def decrypt_local_file_ref(text):
 
 # https://github.com/pypa/pip/blob/716afdb4cf4783ba2f610c2010aa76c4ffdb22e7/src/pip/_internal/utils/filetypes.py
 _ARCHIVE_EXTENSIONS = {
-        '.zip',
-        '.whl',
-        '.tar.bz2',
-        '.tbz',
-        '.tar.gz',
-        '.tgz',
-        '.tar',
-        '.tar.xz',
-        '.txz',
-        '.tlz',
-        '.tar.lz',
-        '.tar.lzma',
+    '.zip',
+    '.whl',
+    '.tar.bz2',
+    '.tbz',
+    '.tar.gz',
+    '.tgz',
+    '.tar',
+    '.tar.xz',
+    '.txz',
+    '.tlz',
+    '.tar.lz',
+    '.tar.lzma',
 }
 
 _ARCHIVE_EXTENSION_LENGTHS = sorted(set(map(len, _ARCHIVE_EXTENSIONS)), reverse=True)

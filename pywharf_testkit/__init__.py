@@ -9,17 +9,17 @@ from _pytest.monkeypatch import MonkeyPatch
 import shortuuid
 
 from pywharf_core.backend import (
-        BackendInstanceManager,
-        PkgRepoConfig,
-        PkgRepoSecret,
+    BackendInstanceManager,
+    PkgRepoConfig,
+    PkgRepoSecret,
 )
 from pywharf_core.workflow import (
-        WorkflowStat,
-        initialize_task_worker,
-        build_workflow_stat,
-        sync_local_index,
-        workflow_api_simple_distrib,
-        workflow_api_upload_package,
+    WorkflowStat,
+    initialize_task_worker,
+    build_workflow_stat,
+    sync_local_index,
+    workflow_api_simple_distrib,
+    workflow_api_upload_package,
 )
 
 
@@ -52,12 +52,12 @@ def test_upload_with_write_secret(session_repo, tmpdir, update_repo_index):
 
     # Upload.
     _, status_code = workflow_api_upload_package(
-            wstat=session_repo.wstat,
-            name=session_repo.name,
-            pkg_repo_secret=session_repo.write_secret,
-            filename=filename,
-            meta={'name': distrib},
-            path=path,
+        wstat=session_repo.wstat,
+        name=session_repo.name,
+        pkg_repo_secret=session_repo.write_secret,
+        filename=filename,
+        meta={'name': distrib},
+        path=path,
     )
     assert status_code == 200
 
@@ -70,10 +70,10 @@ def test_upload_with_write_secret(session_repo, tmpdir, update_repo_index):
 
     # Check if package exists.
     _, status_code = workflow_api_simple_distrib(
-            wstat=session_repo.wstat,
-            name=session_repo.name,
-            pkg_repo_secret=session_repo.write_secret,
-            distrib=distrib,
+        wstat=session_repo.wstat,
+        name=session_repo.name,
+        pkg_repo_secret=session_repo.write_secret,
+        distrib=distrib,
     )
     assert status_code == 200
 
@@ -85,12 +85,12 @@ def test_upload_with_read_secret(session_repo, tmpdir):
     create_random_file(path, 128)
 
     _, status_code = workflow_api_upload_package(
-            wstat=session_repo.wstat,
-            name=session_repo.name,
-            pkg_repo_secret=session_repo.read_secret,
-            filename=filename,
-            meta={'name': distrib},
-            path=path,
+        wstat=session_repo.wstat,
+        name=session_repo.name,
+        pkg_repo_secret=session_repo.read_secret,
+        filename=filename,
+        meta={'name': distrib},
+        path=path,
     )
     assert status_code == 401
 
@@ -127,73 +127,73 @@ class TestKit:
 
             if not admin_secret_as_env:
                 BackendInstanceManager.dump_pkg_repo_secrets(
-                        admin_pkg_repo_secret_file,
-                        [read_secret],
+                    admin_pkg_repo_secret_file,
+                    [read_secret],
                 )
             else:
                 env = shortuuid.uuid()
                 BackendInstanceManager.dump_pkg_repo_secrets(
-                        admin_pkg_repo_secret_file,
-                        [read_secret],
-                        {pkg_repo_config.name.lower(): env},
+                    admin_pkg_repo_secret_file,
+                    [read_secret],
+                    {pkg_repo_config.name.lower(): env},
                 )
                 set_env(env, read_secret.raw)
 
             root_folder = str(create_tmpdir('root'))
 
             wstat = build_workflow_stat(
-                    pkg_repo_config_file=pkg_repo_config_file,
-                    admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-                    root_folder=root_folder,
-                    auth_read_expires=0,
-                    auth_write_expires=0,
-                    enable_sync_local_index=True,
+                pkg_repo_config_file=pkg_repo_config_file,
+                admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+                root_folder=root_folder,
+                auth_read_expires=0,
+                auth_write_expires=0,
+                enable_sync_local_index=True,
             )
 
             return RepoInfoForTest(
-                    name=pkg_repo_config.name.lower(),
-                    pkg_repo_config_file=pkg_repo_config_file,
-                    admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
-                    root_folder=root_folder,
-                    read_secret=read_secret,
-                    write_secret=write_secret,
-                    wstat=wstat,
+                name=pkg_repo_config.name.lower(),
+                pkg_repo_config_file=pkg_repo_config_file,
+                admin_pkg_repo_secret_file=admin_pkg_repo_secret_file,
+                root_folder=root_folder,
+                read_secret=read_secret,
+                write_secret=write_secret,
+                wstat=wstat,
             )
 
         @inject_to_caller
         @pytest.fixture(scope='session')
-        def session_repo(tmpdir_factory):  # pylint: disable=unused-variable
+        def session_repo(tmpdir_factory):
             monkeypatch = MonkeyPatch()
 
             yield _create_repo_for_test(
-                    tmpdir_factory.mktemp,
-                    monkeypatch.setenv,
-                    admin_secret_as_env=False,
+                tmpdir_factory.mktemp,
+                monkeypatch.setenv,
+                admin_secret_as_env=False,
             )
 
             monkeypatch.undo()
 
         @inject_to_caller
         @pytest.fixture(scope='function')
-        def function_repo(tmpdir, monkeypatch):  # pylint: disable=unused-variable
+        def function_repo(tmpdir, monkeypatch):
             yield _create_repo_for_test(
-                    tmpdir.mkdir,
-                    monkeypatch.setenv,
-                    admin_secret_as_env=False,
+                tmpdir.mkdir,
+                monkeypatch.setenv,
+                admin_secret_as_env=False,
             )
 
         @inject_to_caller
         @pytest.fixture(scope='function')
-        def function_repo_admin_secret_as_env(tmpdir, monkeypatch):  # pylint: disable=unused-variable
+        def function_repo_admin_secret_as_env(tmpdir, monkeypatch):
             yield _create_repo_for_test(
-                    tmpdir.mkdir,
-                    monkeypatch.setenv,
-                    admin_secret_as_env=True,
+                tmpdir.mkdir,
+                monkeypatch.setenv,
+                admin_secret_as_env=True,
             )
 
         @inject_to_caller
         @pytest.fixture(scope='function')
-        def update_repo_index():  # pylint: disable=unused-variable
+        def update_repo_index():
             yield cls.update_repo_index
 
         inject_to_caller(test_admin_secret_as_env)

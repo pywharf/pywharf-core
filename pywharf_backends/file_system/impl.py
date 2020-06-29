@@ -10,25 +10,25 @@ from filelock import FileLock
 import shortuuid
 
 from pywharf_core.backend import (
-        PkgRef,
-        PkgRepo,
-        PkgRepoConfig,
-        PkgRepoSecret,
-        UploadPackageStatus,
-        UploadPackageResult,
-        UploadPackageContext,
-        UploadIndexStatus,
-        UploadIndexResult,
-        DownloadIndexStatus,
-        DownloadIndexResult,
-        BackendInstanceManager,
+    PkgRef,
+    PkgRepo,
+    PkgRepoConfig,
+    PkgRepoSecret,
+    UploadPackageStatus,
+    UploadPackageResult,
+    UploadPackageContext,
+    UploadIndexStatus,
+    UploadIndexResult,
+    DownloadIndexStatus,
+    DownloadIndexResult,
+    BackendInstanceManager,
 )
 from pywharf_core.utils import (
-        write_toml,
-        read_toml,
-        git_hash_sha,
-        encrypt_local_file_ref,
-        split_package_ext,
+    write_toml,
+    read_toml,
+    git_hash_sha,
+    encrypt_local_file_ref,
+    split_package_ext,
 )
 
 FILE_SYSTEM_TYPE = 'file_system'
@@ -92,9 +92,9 @@ class FileSystemPkgRepo(PkgRepo):
     def __init__(self, **data):
         super().__init__(**data)
         object.__setattr__(
-                self,
-                '_private_fields',
-                FileSystemPkgRepoPrivateFields(ready=True, err_msg=''),
+            self,
+            '_private_fields',
+            FileSystemPkgRepoPrivateFields(ready=True, err_msg=''),
         )
 
         if not isdir(self.local_paths.cache):
@@ -169,7 +169,7 @@ class FileSystemPkgRepo(PkgRepo):
             ctx.failed = True
             ctx.message = '_upload_package: Lock acquire timeout.'
 
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             ctx.failed = True
             ctx.message = '_upload_package:\n' + traceback.format_exc()
 
@@ -177,8 +177,8 @@ class FileSystemPkgRepo(PkgRepo):
         ctx = UploadPackageContext(filename=filename, meta=meta, path=path)
 
         for action in (
-                lambda _: None,  # Validate the context initialization.
-                self._upload_package,
+            lambda _: None,  # Validate the context initialization.
+            self._upload_package,
         ):
             action(ctx)
             if ctx.failed:
@@ -225,14 +225,15 @@ class FileSystemPkgRepo(PkgRepo):
                     continue
 
                 pkg_refs.append(
-                        FileSystemPkgRef(
-                                distrib=distrib,
-                                package=package,
-                                ext=ext,
-                                sha256=sha256,
-                                meta=meta,
-                                package_path=filename_to_package[filename],
-                        ))
+                    FileSystemPkgRef(
+                        distrib=distrib,
+                        package=package,
+                        ext=ext,
+                        sha256=sha256,
+                        meta=meta,
+                        package_path=filename_to_package[filename],
+                    )
+                )
 
         return pkg_refs
 
@@ -240,8 +241,8 @@ class FileSystemPkgRepo(PkgRepo):
         try:
             with FileLock(self._index_lock_path, timeout=LOCK_TIMEOUT):
                 return exists(self._index_path) \
-                        and git_hash_sha(path) == git_hash_sha(self._index_path)
-        except Exception:  # pylint: disable=broad-except
+                    and git_hash_sha(path) == git_hash_sha(self._index_path)
+        except Exception:
             return False
 
     def upload_index(self, path: str) -> UploadIndexResult:
@@ -252,14 +253,14 @@ class FileSystemPkgRepo(PkgRepo):
 
         except TimeoutError:
             return UploadIndexResult(
-                    status=UploadIndexStatus.FAILED,
-                    message='upload_index: Lock acquire timeout.',
+                status=UploadIndexStatus.FAILED,
+                message='upload_index: Lock acquire timeout.',
             )
 
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return UploadIndexResult(
-                    status=UploadIndexStatus.FAILED,
-                    message='upload_index:\n' + traceback.format_exc(),
+                status=UploadIndexStatus.FAILED,
+                message='upload_index:\n' + traceback.format_exc(),
             )
 
     def download_index(self, path: str) -> DownloadIndexResult:
@@ -273,12 +274,12 @@ class FileSystemPkgRepo(PkgRepo):
 
         except TimeoutError:
             return DownloadIndexResult(
-                    status=DownloadIndexStatus.FAILED,
-                    message='download_index: Lock acquire timeout.',
+                status=DownloadIndexStatus.FAILED,
+                message='download_index: Lock acquire timeout.',
             )
 
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return DownloadIndexResult(
-                    status=DownloadIndexStatus.FAILED,
-                    message='download_index:\n' + traceback.format_exc(),
+                status=DownloadIndexStatus.FAILED,
+                message='download_index:\n' + traceback.format_exc(),
             )

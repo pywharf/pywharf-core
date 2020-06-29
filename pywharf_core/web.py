@@ -139,4 +139,4 @@ LOGIN_HTML = '''
 </body>
 
 </html>
-'''
+'''  # noqa: E501
