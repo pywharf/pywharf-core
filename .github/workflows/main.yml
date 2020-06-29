@@ -62,6 +62,7 @@ jobs:
 
       - name: Setup pywharf
         run: |
+          echo "config=${CONFIG}&admin_secret=${ADMIN_SECRET}"
           curl \
             -d "config=${CONFIG}&admin_secret=${ADMIN_SECRET}" \
             -X POST \
