@@ -258,6 +258,8 @@ class BackendInstanceManager:
 
         raw = kwargs.get('raw')
         env = kwargs.get('env')
+        if not raw and not env:
+            raise ValueError(f'Should provide raw or env. kwargs={kwargs}')
         if raw and env:
             raise ValueError(f'Can either set raw or env, but not both. kwargs={kwargs}')
 

@@ -254,7 +254,10 @@ def _load_file_content_for_initialization(key) -> Tuple[bool, str]:
     if key in request.form:
         return True, request.form[key]
     else:
-        return True, request.files[key].read()
+        content = request.files[key].read()
+        if isinstance(content, bytes):
+            content = content.decode()
+        return True, content
 
 
 @app.route('/initialize/', methods=['POST'])
