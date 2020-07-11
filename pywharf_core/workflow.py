@@ -300,6 +300,12 @@ def sync_local_index_job(
     except Exception:
         logger.error(traceback.format_exc())
 
+    finally:
+        # Need to manually remove all handlers.
+        for handler in list(logger.handlers):
+            handler.close()
+            logger.removeHandler(handler)
+
 
 def random_select_port() -> str:
     with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as _socket:
